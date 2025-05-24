@@ -1,243 +1,175 @@
 "use client";
 
-import Image from "next/image";
-import { useState } from "react";
+import React, { useState, useRef, useCallback } from "react";
+import { CaseData, analyzeMessageForInsurance } from "../lib/dialogflow";
+import type { Message, DialogflowResponse } from "../types/hellas-direct";
+import VoiceRecorder from "./components/VoiceRecorder";
 
-// Dialogflow integration
-async function sendToDialogflow(message: string) {
-  // Replace with your Dialogflow project details and endpoint
-  // This is a demo using Dialogflow CX REST API v3 (for production use, secure your credentials!)
-  const projectId = "YOUR_PROJECT_ID";
-  const location = "global"; // or your Dialogflow agent location
-  const agentId = "YOUR_AGENT_ID";
-  const sessionId = typeof window !== 'undefined' ? (window.crypto?.randomUUID?.() || Math.random().toString(36).substring(2)) : Math.random().toString(36).substring(2);
-  const endpoint = `https://dialogflow.googleapis.com/v3/projects/${projectId}/locations/${location}/agents/${agentId}/sessions/${sessionId}:detectIntent`;
-
-  // You need to provide a valid OAuth2 access token for Dialogflow CX
-  const accessToken = "YOUR_ACCESS_TOKEN";
-
-  const body = {
-    queryInput: {
-      text: {
-        text: message,
-      },
-      languageCode: "el"
-    }
-  };
-
-  const res = await fetch(endpoint, {
-    method: "POST",
+// Enhanced Dialogflow integration using our API route
+async function sendToDialogflow(message: string, sessionId?: string): Promise<string> {
+  const response = await fetch('/api/chat', {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${accessToken}`
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body)
+    body: JSON.stringify({ message, sessionId }),
   });
-  if (!res.ok) throw new Error("Dialogflow request failed");
-  const data = await res.json();
-  // Extract the response text
-  return data.queryResult?.responseMessages?.[0]?.text?.text?.[0] || "";
-}
 
-// Mock backend logic based on your prompt
-function analyzeMessage(message: string, caseData: any) {
-  const msg = message.toLowerCase();
-  // Simple keyword-based detection (expand as needed)
-  const acKeywords = [
-    "τρακάρισμα", "ατύχημα", "χτύπημα", "σπασμένο", "ζημιά", "παρμπρίζ", "σταθμευμένο", "εξωτερικό παράγοντα"
-  ];
-  const raKeywords = [
-    "λάστιχο", "βενζίνη", "μπαταρία", "βλάβη", "δεν ξεκινάει", "σταμάτησε", "οδική", "βοήθεια", "ρεζέρβα"
-  ];
-  const fastTrackKeywords = ["πίσω", "σταθμευμένο", "stop", "σήμανση", "ξεπαρκάρισμα", "όπισθεν", "άνοιγμα θύρας"];
-  const fraudKeywords = ["γνωριμία", "ασυμβατότητα", "έναρξη συμβολαίου"];
-  const geolocKeywords = ["εθνική οδός", "άγνωστη τοποθεσία", "διπλότυπο όνομα"];
-  const delayKeywords = ["ώρα αναμονής", "περίμενα πάνω από μία ώρα", "καθυστέρηση"]; // simplistic
-  const notAccessibleKeywords = ["υπόγειο γκαράζ", "μη προσβάσιμο"]; // simplistic
-
-  let type = caseData.type || null;
-  if (!type) {
-    if (acKeywords.some(k => msg.includes(k))) type = "AC";
-    else if (raKeywords.some(k => msg.includes(k))) type = "RA";
-    else type = "OTHER";
+  if (!response.ok) {
+    throw new Error('Failed to send message to Dialogflow');
   }
 
-  // Collect data
-  let newCaseData = { ...caseData };
-  // Must-have fields
-  if (/\b(ονομα|ονόμα|λέγομαι|με λένε|είμαι)\b/.test(msg)) newCaseData.customerName = message;
-  if (/\b(αριθμός κυκλοφορίας|πινακίδα|κυκλοφορίας)\b/.test(msg)) newCaseData.registrationNumber = message;
-  if (/\b(τοποθεσία|βρίσκομαι|είμαι στο|είμαι στην|είμαι στον)\b/.test(msg)) newCaseData.location = message;
-  if (/\b(περιστατικό|συνέβη|έγινε|τι συνέβη|τι έγινε)\b/.test(msg)) newCaseData.description = message;
-  if (/\b(συνεργείο|οικία|προορισμός|θέλω να πάω|τελικός προορισμός)\b/.test(msg)) newCaseData.finalDestination = message;
-
-  // Decision logic
-  if (type === "AC") {
-    // Fast Track
-    if (fastTrackKeywords.some(k => msg.includes(k))) newCaseData.fastTrack = true;
-    // Fraud
-    if (fraudKeywords.some(k => msg.includes(k))) newCaseData.fraud = true;
-  }
-  if (type === "RA") {
-    // Possible malfunction
-    if (raKeywords.some(k => msg.includes(k))) newCaseData.possibleMalfunction = message;
-  }
-  // Delay coupon
-  if (delayKeywords.some(k => msg.includes(k))) newCaseData.delayCoupon = true;
-  // Geolocation link
-  if (geolocKeywords.some(k => msg.includes(k))) newCaseData.geolocLink = true;
-  // Not accessible
-  if (notAccessibleKeywords.some(k => msg.includes(k))) newCaseData.notAccessible = true;
-
-  // Compose bot reply
-  let reply: string[] = [];
-  if (type === "AC") {
-    if (!newCaseData.location) reply.push("Πού ακριβώς βρίσκεστε;");
-    else if (!newCaseData.customerName) reply.push("Μπορείτε να μου δώσετε το ονοματεπώνυμό σας;");
-    else if (!newCaseData.registrationNumber) reply.push("Ποιος είναι ο αριθμός κυκλοφορίας του οχήματός σας;");
-    else if (!newCaseData.description) reply.push("Πώς ακριβώς συνέβη το περιστατικό;");
-    else if (!newCaseData.finalDestination) reply.push("Σε περίπτωση που το όχημα δεν μπορεί να μετακινηθεί, ποιος θα θέλατε να είναι ο τελικός του προορισμός;");
-    else if (!newCaseData.injuryAsked) {
-      reply.push("Είστε όλοι εντάξει; Υπάρχει κάποιος τραυματισμός;");
-      newCaseData.injuryAsked = true;
-    } else if (!newCaseData.damageAsked) {
-      reply.push("Τι υλικές ζημιές έχετε στο όχημά σας; Πού βρίσκονται;");
-      newCaseData.damageAsked = true;
-    } else if (!newCaseData.insuranceAsked) {
-      reply.push("Ποια είναι η ασφαλιστική εταιρία του εμπλεκόμενου οχήματος;");
-      newCaseData.insuranceAsked = true;
-    } else if (!newCaseData.photosAsked) {
-      reply.push("Μπορείτε να στείλετε φωτογραφίες της άδειας κυκλοφορίας, του διπλώματός σας, των ζημιών και του σημείου του συμβάντος;");
-      newCaseData.photosAsked = true;
-    } else {
-      // Summary
-      reply.push("Σας ευχαριστούμε. Ακολουθεί σύνοψη του περιστατικού:");
-      reply.push(JSON.stringify({
-        RegistrationNumber: newCaseData.registrationNumber || "-",
-        CustomerName: newCaseData.customerName || "-",
-        Description: newCaseData.description || "-",
-        Location: newCaseData.location || "-",
-        FinalDestination: newCaseData.finalDestination || "-",
-        FastTrack: !!newCaseData.fastTrack,
-        Fraud: !!newCaseData.fraud
-      }, null, 2));
-    }
-  } else if (type === "RA") {
-    if (!newCaseData.location) reply.push("Πού ακριβώς βρίσκεστε;");
-    else if (!newCaseData.customerName) reply.push("Μπορείτε να μου δώσετε το ονοματεπώνυμό σας;");
-    else if (!newCaseData.registrationNumber) reply.push("Ποιος είναι ο αριθμός κυκλοφορίας του οχήματός σας;");
-    else if (!newCaseData.description) reply.push("Τι συνέβη στο όχημα;");
-    else if (!newCaseData.reserveAsked) {
-      reply.push("Υπάρχει ρεζέρβα στο όχημα;");
-      newCaseData.reserveAsked = true;
-    } else if (!newCaseData.directionAsked) {
-      reply.push("Προς τα πού είχατε κατεύθυνση;");
-      newCaseData.directionAsked = true;
-    } else if (!newCaseData.colorAsked) {
-      reply.push("Τι χρώμα είναι το αυτοκίνητο;");
-      newCaseData.colorAsked = true;
-    } else if (!newCaseData.repairShopAsked) {
-      reply.push("Υπάρχει κάποιο συγκεκριμένο βουλκανιζατέρ/συνεργείο που θα θέλατε να πάμε;");
-      newCaseData.repairShopAsked = true;
-    } else if (!newCaseData.finalDestination) {
-      reply.push("Σε περίπτωση που το όχημα δεν μπορεί να μετακινηθεί, ποιος θα θέλατε να είναι ο τελικός του προορισμός;");
-    } else {
-      // Summary
-      reply.push("Σας ευχαριστούμε. Ακολουθεί σύνοψη του περιστατικού:");
-      reply.push(JSON.stringify({
-        RegistrationNumber: newCaseData.registrationNumber || "-",
-        CustomerName: newCaseData.customerName || "-",
-        Description: newCaseData.description || "-",
-        Location: newCaseData.location || "-",
-        FinalDestination: newCaseData.finalDestination || "-",
-        PossibleMalfunction: newCaseData.possibleMalfunction || "-",
-        DelayCoupon: !!newCaseData.delayCoupon,
-        GeolocLink: !!newCaseData.geolocLink,
-        NotAccessible: !!newCaseData.notAccessible
-      }, null, 2));
-    }
-  } else {
-    reply.push("Ευχαριστώ, εξυπηρετώ μόνο Ατυχήματα και Οδική Βοήθεια.");
-  }
-  return { type, reply, caseData: newCaseData };
+  const data: DialogflowResponse = await response.json();
+  return data.response;
 }
 
 export default function Home() {
-  const [messages, setMessages] = useState<{ from: "user" | "bot"; text: string }[]>(
-    [
-      {
-        from: "bot",
-        text: "👋 Καλώς ήρθατε! Εξυπηρετώ μόνο Ατυχήματα (AC) και Οδική Βοήθεια (RA). Περιγράψτε το περιστατικό σας για να ξεκινήσουμε."
-      }
-    ]
-  );
-  const [input, setInput] = useState("");
-  const [caseData, setCaseData] = useState<any>({});
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      from: "bot",
+      text: "👋 Καλώς ήρθατε στη Hellas Direct! Εξυπηρετώ μόνο Ατυχήματα (AC) και Οδική Βοήθεια (RA). Περιγράψτε το περιστατικό σας για να ξεκινήσουμε."
+    }
+  ]);
+  const [input, setInput] = useState<string>("");
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const [caseData, setCaseData] = useState<CaseData>({});
+  const [sessionId] = useState<string>(() => `session-${Date.now()}-${Math.random().toString(36).substring(2)}`);
 
-  function handleUserMessage(e: React.FormEvent) {
+  // Scroll to bottom whenever messages change
+  React.useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Handle voice input results from VoiceRecorder
+  const handleVoiceResult = useCallback((result: { text: string; source: 'speech-recognition' | 'dialogflow-audio' }) => {
+    if (result.source === 'speech-recognition') {
+      // For speech recognition, set the input text for user to review
+      setInput(result.text);
+    } else {
+      // For Dialogflow audio, add the response directly as a bot message
+      setMessages(msgs => [...msgs, { 
+        from: "bot", 
+        text: result.text
+      }]);
+    }
+  }, []);
+
+  async function handleUserMessage(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
+    
     const userMsg = input.trim();
-    setMessages(msgs => [...msgs, { from: "user", text: userMsg }]);
     setInput("");
-    sendToDialogflow(userMsg)
-      .then(botReply => {
-        setMessages(msgs => [...msgs, { from: "bot", text: botReply || "(Δεν ελήφθη απάντηση από Dialogflow)" }]);
-      })
-      .catch(() => {
-        setMessages(msgs => [...msgs, { from: "bot", text: "Σφάλμα σύνδεσης με Dialogflow." }]);
-      });
+    setIsLoading(true);
+    
+    console.log(`📤 User message: "${userMsg}"`);
+    
+    // Add user message immediately
+    setMessages(msgs => [...msgs, { from: "user", text: userMsg }]);
+    
+    try {
+      // Send to Dialogflow through our API
+      const botReply = await sendToDialogflow(userMsg, sessionId);
+      
+      console.log(`📥 Bot reply: "${botReply}"`);
+      
+      // Add bot response with natural delay
+      setTimeout(() => {
+        setMessages(msgs => [...msgs, { 
+          from: "bot", 
+          text: botReply || "Συγγνώμη, δε μπόρεσα να καταλάβω. Μπορείτε να επαναδιατυπώσετε την ερώτησή σας;"
+        }]);
+        setIsLoading(false);
+      }, 800);
+      
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setTimeout(() => {
+        setMessages(msgs => [...msgs, { 
+          from: "bot", 
+          text: "Παρουσιάστηκε πρόβλημα σύνδεσης. Παρακαλώ δοκιμάστε ξανά σε λίγο." 
+        }]);
+        setIsLoading(false);
+      }, 500);
+    }
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-200">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 flex flex-col items-center justify-center border border-blue-100">
-        <span className="font-bold text-2xl text-blue-700 mb-4">Hellas Direct Chatbot</span>
-        <div className="flex-1 w-full overflow-y-auto text-sm mb-6 px-1" style={{ maxHeight: '40vh' }}>
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className={
-                m.from === "user"
-                  ? "text-right mb-1"
-                  : "text-left mb-1 text-blue-700"
-              }
+    <div className="flex flex-col min-h-screen bg-gray-50">
+      {/* Chat container */}
+      <div className="flex-1 flex flex-col max-w-3xl w-full mx-auto p-4">
+        {/* Header */}
+        <div className="py-4 border-b border-gray-200 mb-4">
+          <h1 className="text-xl font-medium text-gray-800">Hellas Direct Assistant</h1>
+        </div>
+        
+        {/* Message area */}
+        <div className="flex-1 overflow-y-auto mb-4 space-y-4 px-1">
+          {messages.map((message, index) => (
+            <div 
+              key={index} 
+              className={`flex ${message.from === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              <span
-                className={
-                  m.from === "user"
-                    ? "inline-block bg-blue-100 rounded-lg px-3 py-2 text-base shadow"
-                    : "inline-block bg-gray-100 rounded-lg px-3 py-2 text-base shadow"
-                }
-              >
-                {m.text}
-              </span>
+              <div className={`max-w-[80%] px-4 py-3 rounded-lg ${
+                message.from === 'user' 
+                  ? 'bg-blue-600 text-white rounded-br-none' 
+                  : 'bg-white border border-gray-200 text-gray-700 rounded-bl-none shadow-sm'
+              }`}>
+                {message.text}
+              </div>
             </div>
           ))}
+          
+          {/* Loading indicator */}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-white border border-gray-200 text-gray-500 rounded-lg rounded-bl-none px-4 py-3 shadow-sm max-w-[80%]">
+                <div className="flex space-x-2">
+                  <div className="w-2 h-2 rounded-full bg-gray-300 animate-bounce"></div>
+                  <div className="w-2 h-2 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="w-2 h-2 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Auto-scroll anchor */}
+          <div ref={messagesEndRef} />
         </div>
-        <form className="flex w-full gap-2 items-center justify-center" onSubmit={handleUserMessage}>
-          <input
-            id="chat-input"
-            className="flex-1 border-2 border-blue-300 focus:border-blue-500 rounded-full px-4 py-3 text-base shadow-sm transition outline-none bg-blue-50 placeholder-blue-400"
-            type="text"
-            placeholder="Γράψτε το μήνυμά σας..."
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            autoFocus
-          />
-          <button
-            className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-blue-700 text-white px-5 py-3 rounded-full font-semibold shadow-md hover:from-blue-600 hover:to-blue-800 transition text-base"
-            type="submit"
-            aria-label="Αποστολή μηνύματος"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12l15-6m0 0l-6 15m6-15L9.75 9.75" />
-            </svg>
-            Αποστολή
-          </button>
-        </form>
-        <div className="text-xs text-gray-400 mt-4">
-          * Demo. Τα δεδομένα δεν αποστέλλονται σε server.
+        
+        {/* Input area */}
+        <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 rounded-t-lg shadow-lg">
+          <form onSubmit={handleUserMessage} className="flex items-center gap-2">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Γράψτε το μήνυμά σας..."
+              className="flex-1 p-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={isLoading}
+              autoFocus
+            />
+            
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
+              </svg>
+            </button>
+          </form>
+          
+          {/* Enhanced Voice Recorder */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <VoiceRecorder 
+              onAudioResult={handleVoiceResult}
+              sessionId={sessionId}
+              disabled={isLoading}
+            />
+          </div>
         </div>
       </div>
     </div>

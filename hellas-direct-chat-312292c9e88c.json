@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "hellas-direct-chat",
+  "private_key_id": "312292c9e88cdae7e177696053a3e40aa6510ad3",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCUapfti++oxMxN\n4dWGNU4RAKVeX1rgsbvbrQt0DD+iHWvolw7awhRAIyu3JKV70AQwqBoUkHp9PHL7\n8Nmya8PGsEgemmsenPtpvL/+D/gQo+1TCo0Ra1lDBdDEqxw4fmVC9jgaxhSBs22T\naKXXh4qAoxPlRlH2Isj4saEn7GQnnOwuGyjRhMXY/aJIMfUgSpMyypimDtL62nQ4\nEe/0g0nx0irAvXhhniggQE4PbEFTdHqD/HJTedZ9fzZsAWZUT8qTV8p/v14lUXW3\nVQS/XZoMV4xIO2V/8ubm58dt4fYFA6MLqIGtgvUn1vK5abeWsrodo1JeQgbh+xeD\nUvvbAenjAgMBAAECggEAKa50A6FAyeeXLypFAt+WkJzbVJE4HxGbXjsPk+RavKdB\npn1CDTrjYA3gmZs/pHGLs7SKOotG80QWUN5X7U1pmrPoVTvt6JeS3iPF0c7fTqET\nJja43pME6xdHhew+TTlmK/OlVxOZL8HZ/MOvi8PDqJPkIwhoPVWQlpOgXGt9x0fT\n5sxUYRq5nfj2IfCcmT3lQl1EPv2iw/1Rdic0QU8j4uNMfx+SMe9Zdn+qlhFp6t6a\nyf2mdbrJbBIvaKQ4kt9SRLJVIRQQ/s7k11TDuhvW3/YYvckN+MxreeOi1Oeww5L+\nnWdBp37RJLGILNgkzM3Y/Jo0E24Ek75UrATpwzX+UQKBgQDGBEhILiH92Xq9NFux\ne1VKfECyUxxi6+MjaJb59ZvyoLpypuhWfK5f3UATWfLcAy8kdy6qbIYy2vc0kxtP\nAVfyVsd91BkPLlxXxhj3A/zEW6wqf36SN2aZ4tHHTOEr2NiDJDgYyQEz5hhHZehg\nPRPPCmIg5yXRtw7c7CoxkMJukwKBgQC/4CxIBh3cENyOl+mP8Y+4qXwdTWDO4WuW\nchnH4zgw0tNBFzIkxfmPx6Qk9YZNq+Uz4aqQcvgS8x4svqMTOgReH44nKptzmHDy\nGS+3NN8XxiUqVL9N8qmFBArrQ9gzhY6pMzk0XoCJNDAq5nSD5N4Wn+fXDj/yTAxN\nzsQQqQpZcQKBgGO1+lPmbxVtsuGdgOKxUTSNtuJU+YFSePD2lLfPlrSpfNmI9IvA\nguog9kgITkO9krqRDT2iIj1vh3XA8cppychtLE1PRUMgvD0yspWIO3sBEoPf6XNl\nVFP/JFVwgB5dNkFrNpg8d0+T+PvS9B2qA9SIzPr2ilO9E03p2iFVXKLjAoGAbEqd\nM1kgaR+rG19plrADKXmebvtI8/oNuq9TFZmMESIr0MTCrDaAD0Hhxmo8DoJBrfJj\nTXtVv3wvP5moeCV6aZTtqfVGHwueU0UbxQ62CrjuKOIDxn56ZnRNpVJ5JzrttVkP\npBrh+I3X0Z6XjAkTvzkopBuKw7lgCFn2FmERUkECgYEAlqEgDtPuFhhK39lh81yV\nMRoNIv9Qr3JYKTCmeE58zJtM5PaSU9G0EwJuL5CP92podpsWYKFty7ADGTt47jtr\nc0wsM5AS4CMl/CjYYIAr0L1VR+XIGK/rabpXWhw1SPBACaSPU/jpjDbkwaaXoFY5\npmUMT9j1vglj1gOAeNcHsUM=\n-----END PRIVATE KEY-----\n",
+  "client_email": "nextappkey@hellas-direct-chat.iam.gserviceaccount.com",
+  "client_id": "116896571374099126417",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/nextappkey%40hellas-direct-chat.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
