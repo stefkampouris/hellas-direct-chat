@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState, useRef, useCallback } from "react";
+import Link from "next/link";
 import { CaseData, analyzeMessageForInsurance } from "../lib/dialogflow";
 import type { Message, DialogflowResponse } from "../types/hellas-direct";
 import VoiceRecorder from "./components/VoiceRecorder";
+import { Settings } from "lucide-react";
 
 // Enhanced Dialogflow integration using our API route
 async function sendToDialogflow(message: string, sessionId?: string): Promise<string> {
@@ -101,7 +103,16 @@ export default function Home() {
       <div className="flex-1 flex flex-col max-w-3xl w-full mx-auto p-4">
         {/* Header */}
         <div className="py-4 border-b border-gray-200 mb-4">
-          <h1 className="text-xl font-medium text-gray-800">Hellas Direct Assistant</h1>
+          <div className="flex justify-between items-center">
+            <h1 className="text-xl font-medium text-gray-800">Hellas Direct Assistant</h1>
+            
+            {/* Admin navigation - Settings */}
+            <div className="flex items-center gap-4">
+              <Link href="/admin" className="p-2 rounded-full hover:bg-gray-100 transition-colors">
+                <Settings className="w-6 h-6 text-gray-700" />
+              </Link>
+            </div>
+          </div>
         </div>
         
         {/* Message area */}
