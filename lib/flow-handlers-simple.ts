@@ -341,7 +341,6 @@ export class FlowOrchestrator {
       geolocation_link_sent: null,
       responsible_declaration_required: null,
       is_fast_case: false,
-      is_fraud_case: 0,
       communication_quality: null,
       case_summary: null,
       images: null,

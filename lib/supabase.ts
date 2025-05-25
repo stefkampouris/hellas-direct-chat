@@ -222,6 +222,9 @@ export interface Incident {
   communication_quality: string | null; // Mapped from summary.communication_quality
   case_summary: string | null; // Mapped from summary.short_summary
   images: string[] | null;
+  // Evaluation related fields
+  evaluation_completed: boolean | null;
+  evaluation_rating: number | null;
   // Fields that were previously nested and need careful mapping or are new:
   // Consider if these are needed or how they map from old structure:
   // has_injuries?: boolean; (previously ac_data)
@@ -230,8 +233,19 @@ export interface Incident {
   // spare_tyre_available?: boolean; (previously ra_data)
   // is_second_tow_needed?: boolean; (previously conditions.second_tow)
   // is_underground_garage?: boolean; (previously conditions.underground_garage)
-  // is_towing_required?: boolean; (previously conclusions.towing_required)
-  // tags?: string[]; (previously summary.tags)
+  // is_towing_required?: boolean; (previously conclusions.towing_required)  // tags?: string[]; (previously summary.tags)
+}
+
+// Evaluation interface for user feedback
+export interface Evaluation {
+  id: string;
+  created_at: string;
+  session_id: string;
+  case_id: string | null;
+  rating: number; // 1-5 stars
+  satisfied: boolean | null;
+  feedback: string | null;
+  improvements: string[] | null;
 }
 
 /*
@@ -403,6 +417,22 @@ export class DatabaseService {
     
     if (error) {
       console.error('Error updating user:', error);
+      return null;
+    }
+      return data;
+  }
+
+  // Evaluation operations
+  static async createEvaluation(evaluationData: Partial<Omit<Evaluation, 'id' | 'created_at'>>): Promise<Evaluation | null> {
+    console.log(`📝 Querying Supabase: createEvaluation with data:`, evaluationData);
+    const { data, error } = await supabase
+      .from('evaluations')
+      .insert([evaluationData])
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error creating evaluation:', error);
       return null;
     }
     

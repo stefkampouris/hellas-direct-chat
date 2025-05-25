@@ -505,12 +505,13 @@ static async checkFastTrackEligibility(context: FlowContext): Promise<void> {
 
 static async checkFraudIndicators(context: FlowContext): Promise<void> {
   const fraudSuspected = this.hasFraudIndicators(context);
-  
+
   if (context.caseId && context.currentCase) {
     await DatabaseService.updateIncident(context.caseId, { // UPDATED: updateCase -> updateIncident
-      is_fraud_case: fraudSuspected ? 1 : 0
+      is_fraud_case: fraudSuspected ? 1 : 0 // Ensure this matches the type in Incident interface (number | null)
     });
-    context.currentCase.is_fraud_case = fraudSuspected ? 1 : 0;
+    // Ensure context.currentCase.is_fraud_case is updated correctly according to its type
+    (context.currentCase as Incident).is_fraud_case = fraudSuspected ? 1 : 0;
   }
 }
 
@@ -684,7 +685,7 @@ private static generateTags(context: FlowContext): string[] {
   // if (context.currentCase.conditions.underground_garage) tags.push('underground-garage');
   // Add logic for underground garage, e.g., context.currentCase.description.includes('underground garage')
   // if (context.currentCase.conditions.fraud_suspected) tags.push('fraud-suspected');
-  if (context.currentCase.is_fraud_case) tags.push('fraud-suspected'); // Use direct property
+  if (context.currentCase.is_fraud_case && context.currentCase.is_fraud_case > 0) tags.push('fraud-suspected'); // Use direct property and check if > 0
   return tags;
 }
 

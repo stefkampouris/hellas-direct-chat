@@ -151,4 +151,45 @@ BEGIN
     END IF;
 END$$;
 
+-- Evaluations Table
+CREATE TABLE IF NOT EXISTS public.evaluations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  session_id text NOT NULL,
+  case_id uuid NULL,
+  rating integer NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  satisfied boolean NULL,
+  feedback text NULL,
+  improvements text[] NULL,
+  CONSTRAINT evaluations_pkey PRIMARY KEY (id),
+  CONSTRAINT evaluations_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.incidents (id) ON DELETE SET NULL
+) TABLESPACE pg_default;
+
+-- Add evaluation-related fields to incidents table
+ALTER TABLE public.incidents 
+ADD COLUMN IF NOT EXISTS evaluation_completed boolean DEFAULT false,
+ADD COLUMN IF NOT EXISTS evaluation_rating integer NULL CHECK (evaluation_rating >= 1 AND evaluation_rating <= 5);
+
+-- Create indexes for evaluations
+CREATE INDEX IF NOT EXISTS idx_evaluations_session_id ON public.evaluations(session_id);
+CREATE INDEX IF NOT EXISTS idx_evaluations_case_id ON public.evaluations(case_id);
+CREATE INDEX IF NOT EXISTS idx_evaluations_rating ON public.evaluations(rating);
+
+-- RLS Policies for evaluations table
+ALTER TABLE public.evaluations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow service_role to manage evaluations" ON public.evaluations
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "Users can create evaluations" ON public.evaluations
+  FOR INSERT
+  WITH CHECK (true);
+
+CREATE POLICY "Users can view evaluations" ON public.evaluations
+  FOR SELECT
+  USING (true);
+
 COMMENT ON COLUMN public.incidents.is_fraud_case IS 'Consider boolean or a more specific type if appropriate. Numeric might be used for a score.';

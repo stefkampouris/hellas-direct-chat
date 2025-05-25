@@ -20,17 +20,14 @@ export async function POST(req: NextRequest) {
         { error: 'Invalid evaluation data' },
         { status: 400 }
       );
-    }
-
-    // Store evaluation in database
+    }    // Store evaluation in database
     const evaluation = await DatabaseService.createEvaluation({
       session_id: sessionId,
       case_id: caseId || null,
       rating,
       satisfied,
       feedback: feedback || null,
-      improvements: improvements || [],
-      created_at: timestamp || new Date().toISOString()
+      improvements: improvements || []
     });
 
     if (!evaluation) {
