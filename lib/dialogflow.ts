@@ -83,7 +83,20 @@ export interface AudioConfig {
 const PROJECT_ID = process.env.DIALOGFLOW_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT_ID;
 const LOCATION_ID = process.env.DIALOGFLOW_LOCATION_ID || 'global';
 const AGENT_ID = process.env.DIALOGFLOW_AGENT_ID;
-const KEY_FILE = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+const KEY_FILE = {
+  "type": "service_account",
+  "project_id": "hellas-direct-chat",
+  "private_key_id": "0b058c48395ad38c1fe997fa67d6e264bf5f7a3e",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCvey//c+RTh2Gx\nlvzGFv+vyct2niIGuZX1nP8ZxpnSzhbLvFsEnMmUL+Jn5wo0Y7C1ZWh3uznMTw86\nI0TY3jlXW6HWsCzCRDa3v84bYpMTtBOqs8LauIG9+j73lnLz5pZoKisPJw44Ulcw\nrtNy+vG5uZrutPRWdrqe72SXdz6uox1/MZ/VL4HngL4bpUG8c2EhDFlBJE/fEAtR\nnUUApJ5ALsRieQZja8WLrAoEZL8i7JXbbZW2xZB7tmEJXKJ+n+mH+C+oCjm4uQRL\nokLzZkXP3fJdrcbX9hLJm4RCSqPgZHjgt1CP4pvCjPk1GvOJYqgDeDnjnMaz5eqW\nHn6eMdwlAgMBAAECggEAHEM7r4m/mjlpgWQHSbM+Epauc6gT5F/jGGglCQZ802A4\neS9YvHUxHTIaJbBnKxlsRkbzLKeFr1ODaRJxnfkqpJiASBbfWpmIc49Ll4sIk6mS\n6lEh/r6tPMcPeapsUL6Qdm3mOf5JEsamPtPFgBUNNiO/4ZbY7I0aUQtO+PsuaAte\nkBVhxbk//Hg6XiC7K+5twy2Aoecq7GoCPykY2oQDpKjnYj6nr8KDlTd+BtX9D0vq\n0RlKAp5bI1Oc+0/nW5vHNZSx2IuL5cjwNeGMMvA5UZk57Dz10I4+LVK+Df7MDQHF\ntMEFHf6DpAmZHepmWrw1mr9VpMury53j2i8/+2lH0QKBgQDfc+PRFFR09DVisRaC\nklSsxaORISREmCDMRBzgKWK6tO8yIB5Ohp6gP9kk27cb7VUj706vtbRMGbWPU985\nP1DRmwElO/Sltt1m+tmeUb/yXXAiCVhTSiIzW85OUtxGpWRN/dB0SWIZ1iykMkFA\nuVenVUnlAvLfwZEQvWDmKN290QKBgQDJCokFAvUkX67x+nZdaFPKVYV9e0nbcpFk\n5V22F8S1HN7Jjyt34+1NqQcNVrXyY7phEmuSngzmv5c5jSjMm1pmYe3VEKuGmWin\nYQb440sRCiN29O4Zv+WxfdKolMHvGdBzMm9kQ3R7C9hjbe2uyIj3WyUl80bLdFx3\nnmvF200qFQKBgQCk9+o5ccjoj2LaeeMkguQAqekYPF+KRMXyCFdJJ0S8ktgFKbE2\nSCzUIk8t5whIle9FmGd/UabKiDCCoGks2pHQLZ+q3ZjAv0C1xnzjZXdQd6tRdZS/\n6PtW73BgYsw9W92xtrEvKP5EFNrgXjnOjwcngtALQyIMD9wJf8cKJSGQAQKBgEq0\niH/9Plza1WaDvLIvD1vTdbxQMPzD0PVeKfl9UZI/fSYG9o8hek/ubHlvbEL6/goO\nTzz3UDH6pdYz9yI45FnBMCCJhkOJBBOWgYHA7GcTjmQo1cVpwo+3Aq20QXB49jWo\nWy41xrXmi+0+ryDQ0dyg2OgGQ5tczPOCQegO+tiVAoGAaAJjyk1V2ETjfB7wzg4H\nIFjXcaKIMkTUD+tkIDtxYLbcjSwSXtX7QgT0o2NuTCVLKD+JE5R0hmieDCdPlsI2\nzL5ONfTFhUf+IT9QkGjACLZ9OSbDVWutNbBgQyN61OzHTUxAL+QStkSWE/jru9es\nbIzG/nMKUJGJ3NZeo8UytfM=\n-----END PRIVATE KEY-----\n",
+  "client_email": "nextappkey@hellas-direct-chat.iam.gserviceaccount.com",
+  "client_id": "116896571374099126417",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/nextappkey%40hellas-direct-chat.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+};
+
 
 console.log('Initializing Dialogflow CX with:');
 console.log('Project ID:', PROJECT_ID);
@@ -93,7 +106,7 @@ console.log('Key file:', KEY_FILE);
 
 // Initialize Dialogflow CX client
 const sessionClient = new SessionsClient({
-  keyFilename: KEY_FILE || './hellas-direct-chat-0b058c48395a.json',
+  credentials: KEY_FILE,
 });
 
 console.log('Dialogflow CX SessionsClient initialized successfully');
