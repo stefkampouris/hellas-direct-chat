@@ -36,6 +36,7 @@ export default function TextToSpeech({
         // Load available voices
       const loadVoices = () => {
         const availableVoices = speechSynthesis.getVoices();
+        console.log("Available voices loaded:", availableVoices);
         setVoices(availableVoices);
         
         // Debug: Log all available voices

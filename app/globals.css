@@ -109,3 +109,14 @@ body {
 .image-load-animation {
   animation: imageLoad 0.3s ease-out;
 }
+
+@layer utilities {
+  @media (max-width: 768px) {
+    input[type="text"] {
+      color: #000 !important; /* Ensure input text is black */
+    }
+    input[type="text"]::placeholder {
+      color: #555 !important; /* Darker placeholder text for mobile */
+    }
+  }
+}

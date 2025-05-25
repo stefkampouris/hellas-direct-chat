@@ -8,10 +8,12 @@
     "start": "next start"
   },
   "dependencies": {
+    "@elevenlabs/elevenlabs-js": "^2.1.0",
     "@google-cloud/dialogflow": "^7.0.1",
     "@google-cloud/dialogflow-cx": "^5.0.1",
     "@supabase/supabase-js": "^2.49.8",
     "@types/sharp": "^0.32.0",
+    "dotenv": "^16.5.0",
     "lucide-react": "^0.511.0",
     "next": "15.1.8",
     "openai": "^4.103.0",

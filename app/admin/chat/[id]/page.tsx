@@ -98,22 +98,78 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             id: '1',
             incident_id: incidentId,
             sender: 'system',
-            content: 'Chat session started',
-            timestamp: new Date().toISOString()
+            content: 'Η συνομιλία ξεκίνησε. Παρακαλώ περιμένετε για έναν εκπρόσωπο.',
+            timestamp: new Date(Date.now() - 180000).toISOString()
           },
           {
             id: '2',
             incident_id: incidentId,
-            sender: 'user',
-            content: 'My car broke down on the highway',
-            timestamp: new Date(Date.now() - 60000).toISOString()
+            sender: 'agent',
+            content: 'Καλημέρα σας! Είμαι ο βοηθός σας από την Hellas Direct. Για να σας εξυπηρετήσω καλύτερα, θα ήθελα το ονοματεπώνυμό σας και τον αριθμό κυκλοφορίας του οχήματός σας, παρακαλώ.',
+            timestamp: new Date(Date.now() - 170000).toISOString()
           },
           {
             id: '3',
             incident_id: incidentId,
+            sender: 'user',
+            content: 'Γεια σας. Με λένε Γιώργος Παπαδόπουλος και ο αριθμός κυκλοφορίας είναι ΑΒΖ-1234.',
+            timestamp: new Date(Date.now() - 150000).toISOString()
+          },
+          {
+            id: '4',
+            incident_id: incidentId,
             sender: 'agent',
-            content: 'I understand the situation. Can you share your current location?',
+            content: 'Ευχαριστώ, κύριε Παπαδόπουλε. Μπορείτε να μου περιγράψετε τι ακριβώς συνέβη και πού βρίσκεστε αυτή τη στιγμή;',
+            timestamp: new Date(Date.now() - 140000).toISOString()
+          },
+          {
+            id: '5',
+            incident_id: incidentId,
+            sender: 'user',
+            content: 'Το αυτοκίνητο σταμάτησε ξαφνικά ενώ οδηγούσα. Δεν παίρνει μπρος. Είμαι στην Εθνική Οδό Αθηνών-Λαμίας, στο ρεύμα προς Λαμία, κοντά στη έξοδο για Θήβα.',
+            timestamp: new Date(Date.now() - 120000).toISOString()
+          },
+          {
+            id: '6',
+            incident_id: incidentId,
+            sender: 'agent',
+            content: 'Κατανοητό. Και πού θα θέλατε να μεταφερθεί το όχημά σας, σε περίπτωση που δεν μπορεί να επισκευαστεί επί τόπου;',
+            timestamp: new Date(Date.now() - 100000).toISOString()
+          },
+          {
+            id: '7',
+            incident_id: incidentId,
+            sender: 'user',
+            content: 'Θα ήθελα να πάει στο συνεργείο μου στην Αθήνα, στην οδό Πειραιώς 100.',
+            timestamp: new Date(Date.now() - 80000).toISOString()
+          },
+          {
+            id: '8',
+            incident_id: incidentId,
+            sender: 'agent',
+            content: 'Μάλιστα. Από την περιγραφή σας, πιθανολογώ ότι μπορεί να υπάρχει κάποιο πρόβλημα με την μπαταρία ή το σύστημα τροφοδοσίας καυσίμου. Θα στείλουμε άμεσα τεχνικό για έναν έλεγχο και πιθανή επιτόπου εκκίνηση. Ο τελικός προορισμός που μου είπατε (Αθήνα) είναι εντός του νομού Αττικής, σωστά;',
+            timestamp: new Date(Date.now() - 60000).toISOString()
+          },
+          {
+            id: '9',
+            incident_id: incidentId,
+            sender: 'user',
+            content: 'Ναι, η Αθήνα είναι εντός Αττικής. Ελπίζω να φτιαχτεί γρήγορα.',
+            timestamp: new Date(Date.now() - 50000).toISOString()
+          },
+          {
+            id: '10',
+            incident_id: incidentId,
+            sender: 'agent',
+            content: 'Θα κάνουμε ό,τι καλύτερο μπορούμε. Σε περίπτωση που χρειαστεί μεταφορά σε συνεργείο, το προτεινόμενο συνεργαζόμενο συνεργείο μας κοντά στην τρέχουσα τοποθεσία σας που εξειδικεύεται σε τέτοιες βλάβες είναι το "AutoFix Experts" στη Θήβα. Εναλλακτικά, μπορούμε να το μεταφέρουμε στο συνεργείο σας στην Αθήνα όπως είπατε. Τι προτιμάτε;',
             timestamp: new Date(Date.now() - 30000).toISOString()
+          },
+           {
+            id: '11',
+            incident_id: incidentId,
+            sender: 'user',
+            content: 'Ας έρθει πρώτα ο τεχνικός και βλέπουμε. Αν δεν φτιάχνεται, τότε στο δικό μου συνεργείο στην Αθήνα.',
+            timestamp: new Date(Date.now() - 10000).toISOString()
           }
         ];
         

@@ -1,6 +1,8 @@
 // lib/flow-handlers-simple.ts - Simplified synchronous flow handlers
 import { WebhookRequest, WebhookResponse } from './dialogflow';
 import { DatabaseService, Incident, User } from './supabase'; // Updated import
+import fs from 'fs';
+import path from 'path';
 
 export interface FlowContext { // Ensure FlowContext can hold all necessary parameters from sessionInfo
   sessionId: string;
@@ -574,7 +576,7 @@ export class FlowOrchestrator {
       fulfillmentResponse: {
         messages: [{
           text: {
-            text: ['Υπάρχουν τραυματισμοί ή μόνο υλικές ζημιές;']
+            text: ['Υπάρχουν τραυματισμοί ή μόνο υλικές ζημίες;']
           }
         }]
       }
@@ -810,8 +812,44 @@ export class FlowOrchestrator {
   
   private static recommendGarage(context: FlowContext): string {
     const location = context.parameters.location || '';
+    const garagesFilePath = path.join(process.cwd(), 'public', 'garages.md');
+    try {
+      const markdownContent = fs.readFileSync(garagesFilePath, 'utf-8');
+      const lines = markdownContent.split('\\n');
+      const garages = lines.slice(2) // Skip header and separator
+        .map(line => {
+          const parts = line.split('|').map(part => part.trim());
+          if (parts.length >= 4) {
+            return {
+              type: parts[1],
+              name: parts[2],
+              location: parts[3]
+            };
+          }
+          return null;
+        })
+        .filter(garage => garage !== null && garage.name && garage.location);
+
+      if (garages.length > 0) {
+        // Simple logic: return the first garage that somewhat matches the location
+        // More sophisticated matching could be implemented here (e.g., by city, district)
+        const lowerLocation = location.toLowerCase();
+        for (const garage of garages) {
+          if (garage && garage.location.toLowerCase().includes(lowerLocation)) {
+            return `${garage.name} - ${garage.location}`;
+          }
+        }
+        // If no specific match, return the first one from the list as a generic suggestion
+        if (garages[0]) {
+          return `${garages[0].name} - ${garages[0].location}`;
+        }
+      }
+    } catch (error) {
+      console.error('Error reading or parsing garages.md:', error);
+      // Fallback to generic message if file reading fails
+    }
     
-    // Simple garage recommendation
+    // Fallback to original simple garage recommendation if file is empty or parsing fails
     if (location.toLowerCase().includes('αθήνα')) {
       return 'Συνεργείο Αθήνας - Λ. Αθηνών 123 (210-1234567)';
     } else if (location.toLowerCase().includes('θεσσαλονίκη')) {
