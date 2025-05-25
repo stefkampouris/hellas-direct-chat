@@ -9,6 +9,45 @@ import {
   AlertCircle, 
   CheckCircle 
 } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+
+interface User {
+  id: string;
+  created_at: string;
+  full_name?: string | null;
+  registration_number?: string | null;
+  afm?: string | null;
+  starting_date?: string | null;
+  ending_at?: string | null;
+  phone_number?: string | null;
+  email?: string | null;
+  address?: string | null;
+}
+
+interface Incident {
+  id: string;
+  created_at: string;
+  user_id: string;
+  registration_number?: string | null;
+  location?: string | null;
+  description?: string | null;
+  case_type?: string | null;
+  final_vehicle_destination?: string | null;
+  possible_vehicle_malfunction?: string | null;
+  possible_problem_resolution?: string | null;
+  recommended_garage?: string | null;
+  is_destination_out_perfecture?: boolean | null;
+  delay_voucher_issued?: boolean | null;
+  geolocation_link_sent?: string | null;
+  responsible_declaration_required?: string | null;
+  is_fast_case?: boolean | null;
+  is_fraud_case?: number | null;
+  communication_quality?: string | null;
+  case_summary?: string | null;
+  images?: string[] | null;
+  users?: User; // For joined user data
+}
 
 interface ChatMessage {
   id: string;
@@ -20,56 +59,146 @@ interface ChatMessage {
 }
 
 const Dashboard = () => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: '1',
-      customerName: 'Maria Papadopoulos',
-      message: 'My car broke down on the highway near Thessaloniki. I need immediate assistance.',
-      timestamp: '2 minutes ago',
-      urgency: 'high',
-      status: 'active'
-    },
-    {
-      id: '2',
-      customerName: 'Nikos Stavros',
-      message: 'I had a minor accident in Athens. Need to file a claim.',
-      timestamp: '5 minutes ago',
-      urgency: 'medium',
-      status: 'waiting'
-    },
-    {
-      id: '3',
-      customerName: 'Elena Kostas',
-      message: 'Question about my policy coverage for international travel.',
-      timestamp: '8 minutes ago',
-      urgency: 'low',
-      status: 'active'
-    }
-  ]);
-
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [newMessageCount, setNewMessageCount] = useState(0);
 
-  useEffect(() => {
-    // Simulate new messages arriving
-    const interval = setInterval(() => {
-      const newMessage: ChatMessage = {
-        id: Date.now().toString(),
-        customerName: `Customer ${Math.floor(Math.random() * 1000)}`,
-        message: 'New message from customer...',
-        timestamp: 'Just now',
-        urgency: ['low', 'medium', 'high'][Math.floor(Math.random() * 3)] as 'low' | 'medium' | 'high',
-        status: 'active'
-      };
+  // Function to create test data
+  const createTestData = async () => {
+    try {
+      const response = await fetch('/api/create-test-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
       
-      setMessages(prev => [newMessage, ...prev]);
-      setNewMessageCount(prev => prev + 1);
-      
-      // Reset counter after 3 seconds
-      setTimeout(() => setNewMessageCount(0), 3000);
-    }, 15000);
+      const result = await response.json();
+      if (result.success) {
+        alert('Test data created successfully! Refresh the page to see new conversations.');
+        // Refresh the incidents
+        window.location.reload();
+      } else {
+        alert('Failed to create test data: ' + result.details);
+      }
+    } catch (error) {
+      console.error('Error creating test data:', error);
+      alert('Error creating test data. Check console for details.');
+    }
+  };
 
-    return () => clearInterval(interval);
+  useEffect(() => {
+    // Fetch real incidents from database
+    const fetchIncidents = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const { data: incidentsData, error: incidentsError } = await supabase
+          .from('incidents')
+          .select('*, users (full_name, email, phone_number)')
+          .order('created_at', { ascending: false });
+        
+        if (incidentsError) throw incidentsError;
+        setIncidents(incidentsData || []);
+        
+      } catch (err: any) {
+        console.error("Error fetching incidents:", err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchIncidents();
+
+    // Set up real-time subscription for new incidents
+    const incidentsSubscription: RealtimeChannel = supabase
+      .channel('dashboard-incidents')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'incidents' },
+        (payload: RealtimePostgresChangesPayload<Incident>) => {
+          console.log('Dashboard: Incident change received!', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            // Fetch the complete data with user info for new incident
+            supabase
+              .from('incidents')
+              .select('*, users (full_name, email, phone_number)')
+              .eq('id', payload.new.id)
+              .single()
+              .then(({ data }: { data: Incident | null }) => {
+                if (data) {
+                  setIncidents(current => [data, ...current]);
+                  setNewMessageCount(prev => prev + 1);
+                  
+                  // Reset counter after 5 seconds
+                  setTimeout(() => setNewMessageCount(0), 5000);
+                }
+              });
+          } else if (payload.eventType === 'UPDATE') {
+            // Update existing incident in the list
+            supabase
+              .from('incidents')
+              .select('*, users (full_name, email, phone_number)')
+              .eq('id', payload.new.id)
+              .single()
+              .then(({ data }: { data: Incident | null }) => {
+                if (data) {
+                  setIncidents(current => 
+                    current.map(inc => inc.id === data.id ? data : inc)
+                  );
+                }
+              });
+          } else if (payload.eventType === 'DELETE') {
+            // Remove from the list
+            setIncidents(current => 
+              current.filter(inc => inc.id !== payload.old.id)
+            );
+          }
+        }
+      )
+      .subscribe((status: string, err?: Error) => {
+        if (err) {
+          console.error('Error subscribing to incident updates:', err);
+          setError('Failed to subscribe to incident updates: ' + err.message);
+        }
+      });
+
+    // Cleanup subscription on component unmount
+    return () => {
+      supabase.removeChannel(incidentsSubscription);
+    };
   }, []);
+
+  // Convert incident to message format for display
+  const convertIncidentToMessage = (incident: Incident): ChatMessage => {
+    const getUrgencyFromIncident = (incident: Incident): 'low' | 'medium' | 'high' => {
+      if (incident.is_fraud_case && incident.is_fraud_case > 0) return 'high';
+      if (incident.case_type === 'AC') return 'high';
+      if (incident.is_fast_case) return 'medium';
+      return 'low';
+    };
+
+    const getStatusFromIncident = (incident: Incident): 'active' | 'waiting' | 'resolved' => {
+      if (incident.case_summary?.includes('resolved') || incident.case_summary?.includes('completed')) return 'resolved';
+      if (incident.final_vehicle_destination) return 'waiting';
+      return 'active';
+    };
+
+    return {
+      id: incident.id,
+      customerName: incident.users?.full_name || 'Unknown Customer',
+      message: incident.description || incident.possible_vehicle_malfunction || 'New incident reported',
+      timestamp: new Date(incident.created_at).toLocaleString(),
+      urgency: getUrgencyFromIncident(incident),
+      status: getStatusFromIncident(incident)
+    };
+  };
+
+  const messages = incidents.map(convertIncidentToMessage);
 
   const getUrgencyColor = (urgency: string) => {
     switch (urgency) {
@@ -113,6 +242,15 @@ const Dashboard = () => {
                 <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
                 <span className="text-sm text-gray-600">Live</span>
               </div>
+              {/* Test Data Button */}
+              {(!loading && incidents.length === 0) && (
+                <button
+                  onClick={createTestData}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Create Test Data
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -126,7 +264,9 @@ const Dashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Active Chats</p>
-                <p className="text-2xl font-bold text-blue-600">24</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {loading ? '...' : messages.filter(m => m.status === 'active').length}
+                </p>
               </div>
               <MessageSquare className="w-8 h-8 text-blue-600" />
             </div>
@@ -135,7 +275,9 @@ const Dashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Pending</p>
-                <p className="text-2xl font-bold text-orange-600">8</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {loading ? '...' : messages.filter(m => m.status === 'waiting').length}
+                </p>
               </div>
               <Clock className="w-8 h-8 text-orange-600" />
             </div>
@@ -144,7 +286,9 @@ const Dashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">High Priority</p>
-                <p className="text-2xl font-bold text-red-600">3</p>
+                <p className="text-2xl font-bold text-red-600">
+                  {loading ? '...' : messages.filter(m => m.urgency === 'high').length}
+                </p>
               </div>
               <AlertCircle className="w-8 h-8 text-red-600" />
             </div>
@@ -152,8 +296,10 @@ const Dashboard = () => {
           <div className="bg-white rounded-lg shadow p-6 border border-blue-100">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Avg Response</p>
-                <p className="text-2xl font-bold text-green-600">2.3m</p>
+                <p className="text-sm font-medium text-gray-600">Total Cases</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {loading ? '...' : incidents.length}
+                </p>
               </div>
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
@@ -168,10 +314,32 @@ const Dashboard = () => {
           </div>
           
           <div className="p-6 space-y-4 max-h-96 overflow-y-auto">
-            {messages.map((message, index) => (
-              <div 
+            {loading && (
+              <div className="text-center py-8">
+                <div className="w-8 h-8 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-2"></div>
+                <p className="text-gray-600">Loading conversations...</p>
+              </div>
+            )}
+            
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                <AlertCircle className="w-6 h-6 text-red-600 mx-auto mb-2" />
+                <p className="text-red-700">Error loading conversations: {error}</p>
+              </div>
+            )}
+            
+            {!loading && !error && messages.length === 0 && (
+              <div className="text-center py-8">
+                <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">No conversations yet. Start chatting with customers!</p>
+              </div>
+            )}
+            
+            {!loading && !error && messages.map((message, index) => (
+              <Link 
                 key={message.id}
-                className={`p-4 rounded-lg border transition-all duration-500 hover:shadow-md ${
+                href={`/admin/chat/${message.id}`}
+                className={`block p-4 rounded-lg border transition-all duration-500 hover:shadow-md hover:border-blue-300 cursor-pointer ${
                   index === 0 ? 'animate-pulse' : ''
                 }`}
                 style={{
@@ -185,11 +353,21 @@ const Dashboard = () => {
                     <span className={`px-2 py-1 text-xs rounded-full border ${getUrgencyColor(message.urgency)}`}>
                       {message.urgency}
                     </span>
+                    {incidents.find(i => i.id === message.id)?.case_type && (
+                      <span className="px-2 py-1 text-xs rounded-full bg-blue-100 border-blue-300 text-blue-800">
+                        {incidents.find(i => i.id === message.id)?.case_type}
+                      </span>
+                    )}
                   </div>
                   <span className="text-sm text-gray-500">{message.timestamp}</span>
                 </div>
                 <p className="text-gray-700">{message.message}</p>
-              </div>
+                {incidents.find(i => i.id === message.id)?.location && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    📍 {incidents.find(i => i.id === message.id)?.location}
+                  </p>
+                )}
+              </Link>
             ))}
           </div>
         </div>
