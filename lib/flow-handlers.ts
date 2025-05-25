@@ -285,17 +285,15 @@ export class DataCollectionFlow {
     
     // Check if geolocation link is needed
     const needsGeolocation = this.needsGeolocationLink(location);
-    
-    if (needsGeolocation && context.caseId && context.currentCase) {
-      const geoLocationLink = `https://geolocation.hellasdirect.gr/${context.caseId}`; // Example link construction
+      if (needsGeolocation && context.caseId && context.currentCase) {
+      const geoLocationLink = `https://geolocation.hellasdirect.gr/`; // Base geolocation URL
       await DatabaseService.updateIncident(context.caseId, { // UPDATED: updateCase -> updateIncident
         geolocation_link_sent: geoLocationLink 
       });
       context.currentCase.geolocation_link_sent = geoLocationLink;
     }
-    
-    const message = needsGeolocation 
-      ? `Καταλαβαίνω τη τοποθεσία. Για να είμαι πιο ακριβής, μπορείτε να μου στείλετε την ακριβή τοποθεσία σας μέσω αυτού του συνδέσμου: https://geolocation.hellasdirect.gr\n\nΤώρα, πού θα θέλατε να μεταφερθεί το όχημά σας;`
+      const message = needsGeolocation 
+      ? `Καταλαβαίνω τη τοποθεσία. Για να είμαι πιο ακριβής, μπορείτε να μου στείλετε την ακριβή τοποθεσία σας μέσω αυτού του συνδέσμου: https://geolocation.hellasdirect.gr/\n\nΤώρα, πού θα θέλατε να μεταφερθεί το όχημά σας;`
       : 'Καταλαβαίνω τη τοποθεσία. Πού θα θέλατε να μεταφερθεί το όχημά σας;';
     
     return {

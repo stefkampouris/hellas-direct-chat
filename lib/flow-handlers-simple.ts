@@ -425,19 +425,17 @@ export class FlowOrchestrator {
     const needsGeolocation = this.needsGeolocationLink(location);
     
     if (caseId) {
-      try {
-        const updates: Partial<Omit<Incident, 'id' | 'created_at' | 'user_id'>> = {
+      try {        const updates: Partial<Omit<Incident, 'id' | 'created_at' | 'user_id'>> = {
             location: location,
-            geolocation_link_sent: needsGeolocation ? "true" : null 
+            geolocation_link_sent: needsGeolocation ? "https://geolocation.hellasdirect.gr/" : null 
         };
         await DatabaseService.updateIncident(caseId, updates);
       } catch (dbError) {
         console.error('Failed to update incident with location:', dbError);
       }
     }
-    
-    const message = needsGeolocation 
-      ? `Καταλαβαίνω τη τοποθεσία. Για να είμαι πιο ακριβής, μπορείτε να μου στείλετε την ακριβή τοποθεσία σας μέσω αυτού του συνδέσμου: https://geolocation.hellasdirect.gr\n\nΤώρα, πού θα θέλατε να μεταφερθεί το όχημά σας;`
+      const message = needsGeolocation 
+      ? `Καταλαβαίνω τη τοποθεσία. Για να είμαι πιο ακριβής, μπορείτε να μου στείλετε την ακριβή τοποθεσία σας μέσω αυτού του συνδέσμου: https://geolocation.hellasdirect.gr/\n\nΤώρα, πού θα θέλατε να μεταφερθεί το όχημά σας;`
       : 'Καταλαβαίνω τη τοποθεσία. Πού θα θέλατε να μεταφερθεί το όχημά σας;';
       console.log(`📝 Writing parameters to session memory:`, {
       location: location,
@@ -557,13 +555,12 @@ export class FlowOrchestrator {
       specialConditionsText.push('Η μεταφορά σε διαφορετικό νομό θα χρειαστεί 3-5 εργάσιμες ημέρες μετά την αρχική μεταφορά.');
       dbIncidentUpdates.is_destination_out_perfecture = true;
     }
-    
-    const geolocationLinkNeeded = location.includes('εθνική') || location.includes('αττική οδό'); // More specific for Attiki Odos
+      const geolocationLinkNeeded = location.includes('εθνική') || location.includes('αττική οδό'); // More specific for Attiki Odos
     if (geolocationLinkNeeded) { // Check if already sent from collectLocation step
         const currentIncident = caseId ? await DatabaseService.getIncidentById(caseId) : null;
         if (!currentIncident?.geolocation_link_sent) { // Send only if not already marked as sent
-            specialConditionsText.push('Θα σας στείλω σύνδεσμο γεωεντοπισμού: https://geolocation.hellasdirect.gr');
-            dbIncidentUpdates.geolocation_link_sent = "true";
+            specialConditionsText.push('Θα σας στείλω σύνδεσμο γεωεντοπισμού: https://geolocation.hellasdirect.gr/');
+            dbIncidentUpdates.geolocation_link_sent = "https://geolocation.hellasdirect.gr/";
         }
     }
 
