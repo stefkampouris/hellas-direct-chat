@@ -7,6 +7,7 @@ import type { Message, DialogflowResponse } from "../types/hellas-direct";
 import VoiceRecorder from "./components/VoiceRecorder";
 import ImageAttachment from "./components/ImageAttachment";
 import ImageMessage from "./components/ImageMessage";
+import TextToSpeech from "./components/TextToSpeech";
 import { Settings, X } from "lucide-react";
 
 // Enhanced Dialogflow integration using our API route
@@ -34,11 +35,15 @@ async function sendToDialogflow(
   };
 }
 
-export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([
+export default function Home() {  const [messages, setMessages] = useState<Message[]>([
     {
       from: "bot",
-      text: "👋 Καλώς ήρθατε στη Hellas Direct! Περιγράψτε το περιστατικό σας για να ξεκινήσουμε."
+      text: "👋 Καλώς ήρθατε στη Hellas Direct! Περιγράψτε το περιστατικό σας για να ξεκινήσουμε.",
+      voice: {
+        enabled: true,
+        canSpeak: true,
+        isPlaying: false
+      }
     }
   ]);
   const [input, setInput] = useState<string>("");
@@ -47,9 +52,32 @@ export default function Home() {
   const [attachedImage, setAttachedImage] = useState<Message['image'] | null>(null); // Added state for attached image
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const [caseData, setCaseData] = useState<CaseData>({});
-  const [sessionId] = useState<string>(() => `session-${Date.now()}-${Math.random().toString(36).substring(2)}`);
-  const [sessionParameters, setSessionParameters] = useState<Record<string, any>>({}); // Add session parameters state
+  const [sessionId] = useState<string>(() => `session-${Date.now()}-${Math.random().toString(36).substring(2)}`);  const [sessionParameters, setSessionParameters] = useState<Record<string, any>>({}); // Add session parameters state
   const inputRef = useRef<HTMLInputElement>(null); // Added ref for input element
+
+  // Voice state management functions
+  const updateVoiceState = useCallback((messageIndex: number, voiceUpdate: Partial<Message['voice']>) => {
+    setMessages(prevMessages => 
+      prevMessages.map((msg, index) => 
+        index === messageIndex && msg.voice 
+          ? { ...msg, voice: { ...msg.voice, ...voiceUpdate } }
+          : msg
+      )
+    );
+  }, []);
+
+  const handleVoiceStart = useCallback((messageIndex: number) => {
+    updateVoiceState(messageIndex, { isPlaying: true });
+  }, [updateVoiceState]);
+
+  const handleVoiceEnd = useCallback((messageIndex: number) => {
+    updateVoiceState(messageIndex, { isPlaying: false });
+  }, [updateVoiceState]);
+
+  const handleVoiceError = useCallback((messageIndex: number, error: Error) => {
+    console.error('Voice playback error:', error);
+    updateVoiceState(messageIndex, { isPlaying: false });
+  }, [updateVoiceState]);
 
   // Scroll to bottom whenever messages change
   React.useEffect(() => {
@@ -67,12 +95,16 @@ export default function Home() {
   const handleVoiceResult = useCallback((result: { text: string; source: 'speech-recognition' | 'dialogflow-audio' }) => {
     if (result.source === 'speech-recognition') {
       // For speech recognition, set the input text for user to review
-      setInput(result.text);
-    } else {
+      setInput(result.text);    } else {
       // For Dialogflow audio, add the response directly as a bot message
       setMessages(msgs => [...msgs, { 
         from: "bot", 
-        text: result.text
+        text: result.text,
+        voice: {
+          enabled: true,
+          canSpeak: true,
+          isPlaying: false
+        }
       }]);
     }
   }, []);
@@ -167,24 +199,31 @@ export default function Home() {
       if (result.parameters) {
         console.log(`📋 Updated parameters:`, result.parameters);
         setSessionParameters(result.parameters); // Update session parameters
-      }
-
-      // Add bot response with natural delay
+      }      // Add bot response with natural delay
       setTimeout(() => {
         setMessages(msgs => [...msgs, {
           from: "bot",
-          text: result.response || "Συγγνώμη, δε μπόρεσα να καταλάβω. Μπορείτε να επαναδιατυπώσετε την ερώτησή σας;"
+          text: result.response || "Συγγνώμη, δε μπόρεσα να καταλάβω. Μπορείτε να επαναδιατυπώσετε την ερώτησή σας;",
+          voice: {
+            enabled: true,
+            canSpeak: true,
+            isPlaying: false
+          }
         }]);
         setIsLoading(false);
         setTimeout(() => inputRef.current?.focus(), 0); // Re-focus the input after state update & render
       }, 800);
 
     } catch (error) {
-      console.error('Error sending message:', error);
-      setTimeout(() => {
+      console.error('Error sending message:', error);      setTimeout(() => {
         setMessages(msgs => [...msgs, { 
           from: "bot", 
-          text: "Παρουσιάστηκε πρόβλημα σύνδεσης. Παρακαλώ δοκιμάστε ξανά σε λίγο." 
+          text: "Παρουσιάστηκε πρόβλημα σύνδεσης. Παρακαλώ δοκιμάστε ξανά σε λίγο.",
+          voice: {
+            enabled: true,
+            canSpeak: true,
+            isPlaying: false
+          }
         }]);
         setIsLoading(false);
         setTimeout(() => inputRef.current?.focus(), 0); // Re-focus the input after state update & render
@@ -231,8 +270,7 @@ export default function Home() {
                 </div>
               )}
               
-              <div className="max-w-[75%] space-y-3">
-                {/* Text message */}
+              <div className="max-w-[75%] space-y-3">                {/* Text message */}
                 {message.text && (
                   <div className={`relative ${
                     message.from === 'user' 
@@ -240,6 +278,21 @@ export default function Home() {
                       : 'bg-white text-gray-800 rounded-3xl rounded-bl-lg px-5 py-3 shadow-sm border border-gray-100'
                   }`}>
                     <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.text}</p>
+                    
+                    {/* Voice controls for bot messages */}
+                    {message.from === 'bot' && message.voice?.enabled && (
+                      <div className="mt-3 pt-2 border-t border-gray-100">
+                        <TextToSpeech
+                          text={message.text}
+                          autoPlay={false}
+                          onStart={() => handleVoiceStart(index)}
+                          onEnd={() => handleVoiceEnd(index)}
+                          onError={(error) => handleVoiceError(index, error)}
+                          disabled={!message.voice.canSpeak}
+                          className="justify-start"
+                        />
+                      </div>
+                    )}
                     
                     {/* Message timestamp */}
                     <div className={`text-xs mt-2 ${
