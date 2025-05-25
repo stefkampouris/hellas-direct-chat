@@ -84,11 +84,29 @@ const AdminIndex = () => {
         { event: '*', schema: 'public', table: 'users' },
         (payload: RealtimePostgresChangesPayload<User>) => { // Added type for payload
           console.log('Users change received!', payload);
-          // Refetch data to reflect changes
-          fetchInitialData();
+          
+          // Process user changes efficiently without full refetch
+          if (payload.eventType === 'INSERT') {
+            setUsers(current => [payload.new as User, ...current]);
+            
+            // Also refetch incidents since they might be affected by new user data
+            fetchInitialData();
+          } else if (payload.eventType === 'UPDATE') {
+            // Update user in the users list
+            setUsers(current => 
+              current.map(user => user.id === payload.new.id ? payload.new as User : user)
+            );
+            
+            // For incidents with this updated user, we need to refetch
+            fetchInitialData();
+          } else if (payload.eventType === 'DELETE') {
+            setUsers(current => 
+              current.filter(user => user.id !== payload.old.id)
+            );
+          }
         }
       )
-      .subscribe((status, err?: Error) => { // Added type for err
+      .subscribe((status: string, err?: Error) => { // Added type for err and status
         if (err) {
           console.error('Error subscribing to users changes:', err);
           setError('Failed to subscribe to user updates: ' + err.message);
@@ -102,11 +120,43 @@ const AdminIndex = () => {
         { event: '*', schema: 'public', table: 'incidents' },
         (payload: RealtimePostgresChangesPayload<Incident>) => { // Added type for payload
           console.log('Incidents change received!', payload);
-          // Refetch data to reflect changes
-          fetchInitialData();
+          
+          // More efficient handling of real-time updates
+          if (payload.eventType === 'INSERT') {
+            // For new incidents, fetch the complete data with user info
+            supabase
+              .from('incidents')
+              .select('*, users (full_name, email)')
+              .eq('id', payload.new.id)
+              .single()
+              .then(({ data }: { data: Incident | null }) => {
+                if (data) {
+                  setIncidents(current => [data, ...current]);
+                }
+              });
+          } else if (payload.eventType === 'UPDATE') {
+            // For updates, fetch the updated incident and replace in the list
+            supabase
+              .from('incidents')
+              .select('*, users (full_name, email)')
+              .eq('id', payload.new.id)
+              .single()
+              .then(({ data }: { data: Incident | null }) => {
+                if (data) {
+                  setIncidents(current => 
+                    current.map(inc => inc.id === data.id ? data : inc)
+                  );
+                }
+              });
+          } else if (payload.eventType === 'DELETE') {
+            // For deletions, remove from the list
+            setIncidents(current => 
+              current.filter(inc => inc.id !== payload.old.id)
+            );
+          }
         }
       )
-      .subscribe((status, err?: Error) => { // Added type for err
+      .subscribe((status: string, err?: Error) => { // Added type for err and status
         if (err) {
           console.error('Error subscribing to incidents changes:', err);
           setError('Failed to subscribe to incident updates: ' + err.message);
@@ -282,17 +332,78 @@ const AdminIndex = () => {
 
             {/* Incidents List */}
             <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
-              <h3 className="text-xl font-medium text-gray-900 mb-4">Reported Incidents ({incidents.length})</h3>
-              {incidents.length === 0 && !error && <p className="text-gray-500">No incidents found or still loading...</p>}
+              <h3 className="text-xl font-medium text-gray-900 mb-4">Live Customer Interactions ({incidents.length})</h3>
+              {incidents.length === 0 && !error && <p className="text-gray-500">No interactions found or still loading...</p>}
               <ul className="space-y-3 max-h-96 overflow-y-auto pr-2">
                 {incidents.map(incident => (
-                  <li key={incident.id} className="text-sm text-gray-700 p-3 border rounded-md shadow-xs hover:shadow-sm transition-shadow">
-                    <p className="font-semibold text-gray-800">Case ID: {incident.id.substring(0,8)}... ({incident.case_type || 'N/A'})</p>
-                    <p className="text-xs text-gray-500">User: {incident.users?.full_name || incident.users?.email || incident.user_id.substring(0,8) + '...'}</p>
-                    <p className="text-xs text-gray-600">Description: {incident.description ? incident.description.substring(0, 70) + (incident.description.length > 70 ? '...' : '') : 'No description'}</p>
-                    <p className="text-xs text-gray-500">Location: {incident.location || 'N/A'}</p>
-                    <p className="text-xs text-gray-400">Reported: {new Date(incident.created_at).toLocaleString()}</p>
-                    {incident.is_fraud_case && <p className="text-xs text-red-500 font-semibold">Potential Fraud Case</p>}
+                  <li key={incident.id} className="text-sm text-gray-700 border rounded-md shadow-xs hover:bg-gray-50 hover:shadow-md transition-all duration-200">
+                    <Link href={`/admin/chat/${incident.id}`} className="block p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded mr-2">
+                            {incident.case_type || 'N/A'}
+                          </span>
+                          {incident.is_fast_case && 
+                            <span className="inline-block px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded">
+                              Fast Case
+                            </span>
+                          }
+                          {incident.is_fraud_case && 
+                            <span className="inline-block px-2 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded ml-2">
+                              Fraud Risk: {incident.is_fraud_case}
+                            </span>
+                          }
+                        </div>
+                        <span className="text-xs text-gray-400">{new Date(incident.created_at).toLocaleString()}</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-3 mb-2">
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium">Customer</p>
+                          <p className="text-sm">{incident.users?.full_name || 'Unknown'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium">Registration</p>
+                          <p className="text-sm">{incident.registration_number || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium">Location</p>
+                          <p className="text-sm truncate">{incident.location || 'N/A'}</p>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium">Description</p>
+                        <p className="text-sm line-clamp-2">{incident.description || 'No description'}</p>
+                      </div>
+                      
+                      {incident.possible_vehicle_malfunction && (
+                        <div className="mt-2">
+                          <p className="text-xs text-gray-500 font-medium">Possible Malfunction</p>
+                          <p className="text-sm line-clamp-1">{incident.possible_vehicle_malfunction}</p>
+                        </div>
+                      )}
+                      
+                      <div className="flex justify-between items-center mt-2">
+                        <div className="flex items-center text-blue-600">
+                          <MessageSquare className="h-4 w-4 mr-1" />
+                          <span className="text-xs font-medium">View Chat</span>
+                        </div>
+                        
+                        <div className="flex space-x-2">
+                          {incident.delay_voucher_issued && (
+                            <span className="inline-block px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
+                              Voucher Issued
+                            </span>
+                          )}
+                          {incident.final_vehicle_destination && (
+                            <span className="inline-block px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded">
+                              Destination Set
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </Link>
                   </li>
                 ))}
               </ul>
