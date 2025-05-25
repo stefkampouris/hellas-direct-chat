@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import DialogflowMessenger from "./components/DialogflowMessenger";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,7 +28,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
-        <DialogflowMessenger />
+        {/* <DialogflowMessenger /> */}
       </body>
     </html>
   );

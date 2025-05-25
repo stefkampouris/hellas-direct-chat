@@ -4,6 +4,12 @@ export interface Message {
   from: "user" | "bot";
   text: string;
   timestamp?: Date;
+  image?: {
+    url: string;
+    analysis?: string;
+    filename?: string;
+    size?: number;
+  };
 }
 
 export interface DialogflowResponse {

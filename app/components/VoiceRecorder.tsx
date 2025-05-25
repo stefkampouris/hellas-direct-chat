@@ -7,9 +7,11 @@ interface VoiceRecorderProps {
   onAudioResult: (result: { text: string; source: 'speech-recognition' | 'dialogflow-audio' }) => void;
   sessionId: string;
   disabled?: boolean;
+  onRecordingStart?: () => void;
+  onRecordingEnd?: () => void;
 }
 
-export default function VoiceRecorder({ onAudioResult, sessionId, disabled }: VoiceRecorderProps) {
+export default function VoiceRecorder({ onAudioResult, sessionId, disabled, onRecordingStart, onRecordingEnd }: VoiceRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [recordingMethod, setRecordingMethod] = useState<'speech-recognition' | 'dialogflow-audio'>('speech-recognition');
@@ -36,21 +38,24 @@ export default function VoiceRecorder({ onAudioResult, sessionId, disabled }: Vo
       onAudioResult({ text: transcript, source: 'speech-recognition' });
       setIsRecording(false);
       setIsProcessing(false);
+      if (onRecordingEnd) onRecordingEnd();
     };
 
     recognition.onerror = (event: any) => {
       console.error('❌ Speech Recognition Error:', event.error);
       setIsRecording(false);
       setIsProcessing(false);
+      if (onRecordingEnd) onRecordingEnd();
     };
 
     recognition.onend = () => {
       setIsRecording(false);
       setIsProcessing(false);
+      if (onRecordingEnd) onRecordingEnd();
     };
 
     return recognition;
-  }, [onAudioResult]);
+  }, [onAudioResult, onRecordingEnd]);
 
   // Convert audio blob to base64
   const audioToBase64 = (audioBlob: Blob): Promise<string> => {
@@ -99,158 +104,144 @@ export default function VoiceRecorder({ onAudioResult, sessionId, disabled }: Vo
       onAudioResult({ text: result.response, source: 'dialogflow-audio' });
     } catch (error: any) {
       console.error('❌ Dialogflow Audio Error:', error);
-      onAudioResult({ 
-        text: `Συγγνώμη, υπήρξε σφάλμα κατά την επεξεργασία του ήχου: ${error.message}`, 
-        source: 'dialogflow-audio' 
-      });
+      // Fallback to speech recognition if Dialogflow fails
+      onAudioResult({ text: 'Error processing audio with Dialogflow.', source: 'speech-recognition' });
     } finally {
+      setIsRecording(false);
       setIsProcessing(false);
+      if (onRecordingEnd) onRecordingEnd();
     }
   };
 
-  // Start recording
-  const startRecording = async () => {
-    try {
-      setIsRecording(true);
-      audioChunksRef.current = [];
+  // Handle start recording
+  const handleStartRecording = async () => {
+    if (isRecording || disabled) return;
+    setIsRecording(true);
+    setIsProcessing(true);
+    if (onRecordingStart) onRecordingStart();
 
-      if (recordingMethod === 'speech-recognition') {
-        // Use browser speech recognition
-        recognitionRef.current = initializeSpeechRecognition();
-        if (recognitionRef.current) {
-          recognitionRef.current.start();
-          console.log('🎤 Started Speech Recognition');
-        } else {
-          throw new Error('Speech recognition not supported');
-        }
+    if (recordingMethod === 'speech-recognition') {
+      // Use browser speech recognition
+      recognitionRef.current = initializeSpeechRecognition();
+      if (recognitionRef.current) {
+        recognitionRef.current.start();
+        console.log('🎤 Started Speech Recognition');
       } else {
-        // Use MediaRecorder for Dialogflow audio
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          audio: {
-            sampleRate: 16000,
-            channelCount: 1,
-            echoCancellation: true,
-            noiseSuppression: true
-          } 
-        });
-
-        mediaRecorderRef.current = new MediaRecorder(stream, {
-          mimeType: 'audio/webm;codecs=opus'
-        });
-
-        mediaRecorderRef.current.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
-        };
-
-        mediaRecorderRef.current.onstop = () => {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
-          sendAudioToDialogflow(audioBlob);
-          
-          // Stop all tracks
-          stream.getTracks().forEach(track => track.stop());
-        };
-
-        mediaRecorderRef.current.start();
-        console.log('🎤 Started MediaRecorder for Dialogflow');
+        throw new Error('Speech recognition not supported');
       }
-    } catch (error: any) {
-      console.error('❌ Failed to start recording:', error);
-      setIsRecording(false);
-      onAudioResult({ 
-        text: `Συγγνώμη, δεν μπόρεσα να ξεκινήσω την ηχογράφηση: ${error.message}`, 
-        source: recordingMethod 
+    } else {
+      // Use MediaRecorder for Dialogflow audio
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true
+        } 
       });
+
+      mediaRecorderRef.current = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorderRef.current.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
+        sendAudioToDialogflow(audioBlob);
+        
+        // Stop all tracks
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorderRef.current.start();
+      console.log('🎤 Started MediaRecorder for Dialogflow');
     }
   };
 
   // Stop recording
-  const stopRecording = () => {
-    if (recordingMethod === 'speech-recognition' && recognitionRef.current) {
-      recognitionRef.current.stop();
-      console.log('🛑 Stopped Speech Recognition');
+  const handleStopRecording = () => {
+    if (!isRecording) return;
+
+    if (recordingMethod === 'speech-recognition') {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
     } else if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
-      console.log('🛑 Stopped MediaRecorder');
     }
-    setIsRecording(false);
+    // onRecordingEnd is called by the respective handlers (onresult, onerror, onend, or finally block in sendAudioToDialogflow)
   };
 
+  // Toggle recording method
   return (
-    <div className="voice-recorder flex flex-col items-center space-y-4">
-      {/* Recording Method Selector */}
-      <div className="flex space-x-4">
-        <label className="flex items-center space-x-2">
-          <input
-            type="radio"
-            value="speech-recognition"
-            checked={recordingMethod === 'speech-recognition'}
-            onChange={(e) => setRecordingMethod(e.target.value as 'speech-recognition')}
-            disabled={isRecording || disabled}
-            className="text-blue-600"
-          />
-          <span className="text-sm">Browser Speech Recognition</span>
-        </label>
-        <label className="flex items-center space-x-2">
-          <input
-            type="radio"
-            value="dialogflow-audio"
-            checked={recordingMethod === 'dialogflow-audio'}
-            onChange={(e) => setRecordingMethod(e.target.value as 'dialogflow-audio')}
-            disabled={isRecording || disabled}
-            className="text-blue-600"
-          />
-          <span className="text-sm">Dialogflow Audio</span>
-        </label>
+    <div className="flex items-center justify-center space-x-4">
+      {/* Recording Method Toggle */}
+      <div className="flex items-center space-x-3 bg-gray-50 rounded-full p-1">
+        <button
+          onClick={() => setRecordingMethod('speech-recognition')}
+          disabled={disabled || isRecording || isProcessing}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+            recordingMethod === 'speech-recognition'
+              ? 'bg-white text-blue-600 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Browser
+        </button>
+        <button
+          onClick={() => setRecordingMethod('dialogflow-audio')}
+          disabled={disabled || isRecording || isProcessing}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+            recordingMethod === 'dialogflow-audio'
+              ? 'bg-white text-blue-600 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          AI Audio
+        </button>
       </div>
 
       {/* Recording Button */}
       <button
-        onMouseDown={startRecording}
-        onMouseUp={stopRecording}
-        onTouchStart={startRecording}
-        onTouchEnd={stopRecording}
+        onMouseDown={handleStartRecording}
+        onMouseUp={handleStopRecording}
+        onTouchStart={handleStartRecording}
+        onTouchEnd={handleStopRecording}
         disabled={disabled || isProcessing}
         className={`
-          px-6 py-3 rounded-full font-medium transition-all duration-200
+          w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg
           ${isRecording 
-            ? 'bg-red-500 text-white shadow-lg animate-pulse' 
+            ? 'bg-red-500 hover:bg-red-600 animate-pulse scale-110' 
             : isProcessing
-            ? 'bg-yellow-500 text-white'
-            : 'bg-blue-500 text-white hover:bg-blue-600'
+            ? 'bg-yellow-500 hover:bg-yellow-600'
+            : 'bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 hover:scale-105'
           }
-          ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+          ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer active:scale-95'}
         `}
       >
-        {isProcessing 
-          ? '⏳ Επεξεργασία...' 
-          : isRecording 
-          ? '🔴 Ηχογράφηση...' 
-          : '🎤 Κρατήστε για ομιλία'
-        }
+        {isProcessing ? (
+          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+        ) : isRecording ? (
+          <div className="w-4 h-4 bg-white rounded-sm"></div>
+        ) : (
+          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+          </svg>
+        )}
       </button>
 
-      {/* Instructions */}
-      <div className="text-xs text-gray-600 text-center max-w-xs">
-        <p>
-          <strong>{recordingMethod === 'speech-recognition' ? 'Browser Recognition:' : 'Dialogflow Audio:'}</strong>
-        </p>
-        <p>
-          {recordingMethod === 'speech-recognition' 
-            ? 'Κρατήστε πατημένο το κουμπί και μιλήστε. Η αναγνώριση γίνεται στον browser.'
-            : 'Κρατήστε πατημένο το κουμπί και μιλήστε. Ο ήχος στέλνεται στο Dialogflow.'
-          }
-        </p>
-      </div>
-
-      {/* Status Indicator */}
+      {/* Status Text */}
       {(isRecording || isProcessing) && (
-        <div className="flex items-center space-x-2 text-sm">
-          <div className={`w-3 h-3 rounded-full ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-yellow-500 animate-spin'}`}></div>
-          <span>
+        <div className="flex items-center space-x-2">
+          <div className={`w-2 h-2 rounded-full ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-yellow-500'}`}></div>
+          <span className="text-xs text-gray-600">
             {isRecording 
-              ? (recordingMethod === 'speech-recognition' ? 'Ακούω...' : 'Ηχογραφώ...')
+              ? 'Ακούω...'
               : 'Επεξεργάζομαι...'
             }
           </span>

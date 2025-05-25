@@ -93,7 +93,7 @@ console.log('Key file:', KEY_FILE);
 
 // Initialize Dialogflow CX client
 const sessionClient = new SessionsClient({
-  keyFilename: KEY_FILE || './hellas-direct-chat-312292c9e88c.json',
+  keyFilename: KEY_FILE || './hellas-direct-chat-0b058c48395a.json',
 });
 
 console.log('Dialogflow CX SessionsClient initialized successfully');
@@ -115,8 +115,7 @@ export async function sendMessageToDialogflow(
     LOCATION_ID,
     AGENT_ID,
     sessionId
-  );
-  const request = {
+  );  const request = {
     session: sessionPath,
     queryInput: {
       text: {
@@ -125,16 +124,21 @@ export async function sendMessageToDialogflow(
       languageCode: 'el', // Greek language
     },
     queryParams: parameters ? {
-      parameters: parameters
+      parameters: parameters,
+      // Ensure parameters are properly structured for Dialogflow CX
+      sessionEntityTypes: [],
+      analyzeQueryTextSentiment: false
     } : undefined,
   };
 
-  try {
-    console.log(`🤖 Sending to Dialogflow CX: "${message}"`);
+  try {    console.log(`🤖 Sending to Dialogflow CX: "${message}"`);
     console.log(`📍 Project: ${PROJECT_ID}`);
     console.log(`📍 Location: ${LOCATION_ID}`);
     console.log(`📍 Agent: ${AGENT_ID}`);
     console.log(`🔗 Session: ${sessionId}`);
+    if (parameters) {
+      console.log(`📋 Sending parameters:`, JSON.stringify(parameters, null, 2));
+    }
     
     const [response] = await sessionClient.detectIntent(request);
     const result = response.queryResult;
@@ -149,6 +153,15 @@ export async function sendMessageToDialogflow(
     console.log('📝 Response messages:', result.responseMessages?.length || 0);
     console.log('📄 Current page:', result.currentPage?.displayName || 'Unknown');
     
+    // Enhanced parameter extraction and logging
+    let extractedParameters: Record<string, any> = {};
+    if (result.parameters) {
+      extractedParameters = Object.fromEntries(
+        Object.entries(result.parameters).map(([key, value]) => [key, value])
+      );
+      console.log('📋 Received parameters from Dialogflow:', JSON.stringify(extractedParameters, null, 2));
+    }
+    
     // Extract text response from response messages
     let responseText = '';
     if (result.responseMessages && result.responseMessages.length > 0) {
@@ -158,8 +171,7 @@ export async function sendMessageToDialogflow(
         }
       }
     }
-    
-    // Fallback to a default message if no text response
+      // Fallback to a default message if no text response
     if (!responseText.trim()) {
       responseText = 'Συγγνώμη, δε μπόρεσα να καταλάβω. Μπορείτε να επαναδιατυπώσετε;';
     }
@@ -169,9 +181,7 @@ export async function sendMessageToDialogflow(
       intent: result.intent?.displayName || undefined,
       confidence: result.intentDetectionConfidence || undefined,
       sessionId: sessionId,
-      parameters: result.parameters ? 
-        Object.fromEntries(Object.entries(result.parameters).map(([key, value]) => [key, value])) : 
-        undefined,
+      parameters: Object.keys(extractedParameters).length > 0 ? extractedParameters : undefined,
       currentPage: result.currentPage?.displayName || undefined
     };
   } catch (error: any) {
@@ -190,7 +200,7 @@ export async function sendMessageToDialogflow(
       console.error('🚨 AUTHENTICATION FAILED:');
       console.error('Check your service account key file and permissions');
       throw new Error('Authentication failed. Please check your credentials.');
-    } else if (error.code === 7 || error.message?.includes('PERMISSION_DENIED')) {
+    } else if (error.message?.includes('PERMISSION_DENIED')) {
       console.error('🚨 PERMISSION DENIED:');
       console.error('The service account needs Dialogflow API Admin role');
       throw new Error('Permission denied. Please check service account roles.');
@@ -455,25 +465,261 @@ export async function detectIntentFromAudio(
   }
 }
 
-// Function to send audio to Dialogflow for voice recognition (Dialogflow CX)
-export async function sendAudioToDialogflow(
-  audioRequest: DialogflowAudioRequest
-): Promise<DialogflowResponse> {
-  // Use the existing detectIntentFromAudio function for consistency
-  return await detectIntentFromAudio(audioRequest);
+// Streaming detect intent interfaces
+export interface StreamingDetectIntentRequest {
+  sessionId: string;
+  audioStream: ReadableStream<Uint8Array>;
+  sampleRate?: number;
+  languageCode?: string;
+  enablePartialResponse?: boolean;
+  parameters?: Record<string, any>;
 }
 
-// Utility function to convert audio blob to base64 for Dialogflow
-export function audioToBase64(audioBlob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      // Remove the data URL prefix to get just the base64 data
-      const base64 = result.split(',')[1];
-      resolve(base64);
+export interface StreamingDetectIntentResponse {
+  transcript?: string;
+  response?: string;
+  intent?: string;
+  confidence?: number;
+  sessionId: string;
+  parameters?: Record<string, any>;
+  currentPage?: string;
+  isPartial?: boolean;
+  recognition_result?: {
+    transcript: string;
+    is_final: boolean;
+    confidence: number;
+  };
+}
+
+// Enhanced webhook request interface with additional debugging fields
+export interface EnhancedWebhookRequest extends WebhookRequest {
+  detectIntentResponseId?: string;
+  traceId?: string;
+  requestId?: string;
+}
+
+// Function to handle streaming detect intent with real-time audio
+export async function streamingDetectIntent(
+  streamRequest: StreamingDetectIntentRequest
+): Promise<AsyncGenerator<StreamingDetectIntentResponse, void, unknown>> {
+  if (!PROJECT_ID || !LOCATION_ID || !AGENT_ID) {
+    throw new Error('Missing required Dialogflow CX configuration. Please set DIALOGFLOW_PROJECT_ID, DIALOGFLOW_LOCATION_ID, and DIALOGFLOW_AGENT_ID environment variables.');
+  }
+
+  const sessionId = streamRequest.sessionId;
+  const sessionPath = sessionClient.projectLocationAgentSessionPath(
+    PROJECT_ID,
+    LOCATION_ID,
+    AGENT_ID,
+    sessionId
+  );
+
+  console.log(`🎥 Starting streaming detect intent for session: ${sessionId}`);
+  console.log(`📍 Project: ${PROJECT_ID}, Location: ${LOCATION_ID}, Agent: ${AGENT_ID}`);
+
+  return streamingDetectIntentGenerator(sessionPath, streamRequest);
+}
+
+async function* streamingDetectIntentGenerator(
+  sessionPath: string,
+  streamRequest: StreamingDetectIntentRequest
+): AsyncGenerator<StreamingDetectIntentResponse, void, unknown> {
+  try {
+    const detectStream = sessionClient.streamingDetectIntent();
+    
+    // Configure the initial streaming request
+    const initialRequest = {
+      session: sessionPath,
+      queryInput: {
+        audio: {
+          config: {
+            audioEncoding: 'AUDIO_ENCODING_LINEAR_16' as const,
+            sampleRateHertz: streamRequest.sampleRate || 16000,
+            enableWordInfo: true,
+          },
+        },
+        languageCode: streamRequest.languageCode || 'el',
+        enablePartialResponse: streamRequest.enablePartialResponse || true,
+      },
+      queryParams: streamRequest.parameters ? {
+        parameters: streamRequest.parameters,
+        sessionEntityTypes: [],
+        analyzeQueryTextSentiment: false
+      } : undefined,
     };
-    reader.onerror = () => reject(new Error('Failed to convert audio to base64'));
-    reader.readAsDataURL(audioBlob);
+
+    // Send the initial configuration
+    detectStream.write(initialRequest);
+
+    // Set up response handling
+    detectStream.on('data', (response: any) => {
+      try {
+        const result = response.queryResult;
+        
+        if (response.recognitionResult) {
+          // Handle partial speech recognition results
+          const recognition = response.recognitionResult;
+          console.log(`🎤 Recognition result: "${recognition.transcript}" (final: ${recognition.isFinal})`);
+          
+          const streamingResponse: StreamingDetectIntentResponse = {
+            transcript: recognition.transcript,
+            sessionId: streamRequest.sessionId,
+            isPartial: !recognition.isFinal,
+            confidence: recognition.confidence || 0,
+            recognition_result: {
+              transcript: recognition.transcript,
+              is_final: recognition.isFinal,
+              confidence: recognition.confidence || 0
+            }
+          };
+          
+          // This would be yielded in a real async generator implementation
+          // For now, we'll use events to communicate partial results
+        }
+
+        if (result) {
+          console.log('✅ Dialogflow CX streaming response received');
+          console.log('💬 Intent:', result.intent?.displayName || 'No intent');
+          console.log('🎯 Confidence:', result.intentDetectionConfidence || 0);
+          console.log('📄 Current page:', result.currentPage?.displayName || 'Unknown');
+
+          // Extract text response
+          let responseText = '';
+          if (result.responseMessages && result.responseMessages.length > 0) {
+            for (const message of result.responseMessages) {
+              if (message.text && message.text.text && message.text.text.length > 0) {
+                responseText += message.text.text.join(' ') + ' ';
+              }
+            }
+          }
+
+          const streamingResponse: StreamingDetectIntentResponse = {
+            transcript: result.transcript,
+            response: responseText.trim() || 'Συγγνώμη, δε μπόρεσα να καταλάβω.',
+            intent: result.intent?.displayName,
+            confidence: result.intentDetectionConfidence,
+            sessionId: streamRequest.sessionId,
+            parameters: result.parameters ? 
+              Object.fromEntries(Object.entries(result.parameters).map(([key, value]) => [key, value])) : 
+              undefined,
+            currentPage: result.currentPage?.displayName,
+            isPartial: false
+          };
+
+          // This would be yielded in the async generator
+        }
+      } catch (error) {
+        console.error('❌ Error processing streaming response:', error);
+      }
+    });
+
+    detectStream.on('error', (error: any) => {
+      console.error('❌ Streaming detect intent error:', error);
+      throw error;
+    });
+
+    detectStream.on('end', () => {
+      console.log('✅ Streaming detect intent ended');
+    });
+
+    // Process audio stream
+    const reader = streamRequest.audioStream.getReader();
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          break;
+        }
+
+        // Convert Uint8Array to Buffer and send to Dialogflow
+        const audioBuffer = Buffer.from(value);
+        detectStream.write({
+          inputAudio: audioBuffer,
+        });
+      }
+    } finally {
+      reader.releaseLock();
+      detectStream.end();
+    }
+
+  } catch (error: any) {
+    console.error('❌ Streaming detect intent error:', error);
+    
+    // Enhanced error handling based on documentation
+    if (error.code === 4 || error.message?.includes('DEADLINE_EXCEEDED')) {
+      console.error('🚨 TIMEOUT ERROR: gRPC deadline exceeded');
+      throw new Error('Request timeout. The streaming session took too long to complete.');
+    } else if (error.code === 14 || error.message?.includes('URL_UNREACHABLE')) {
+      console.error('🚨 NETWORK ERROR: Unable to reach Dialogflow service');
+      throw new Error('Network error. Unable to connect to Dialogflow streaming service.');
+    } else {
+      throw error;
+    }
+  }
+}
+
+// Enhanced webhook request handling with debugging info
+export function enhanceWebhookRequest(request: WebhookRequest): EnhancedWebhookRequest {
+  const enhanced: EnhancedWebhookRequest = {
+    ...request,
+    detectIntentResponseId: generateUUID(),
+    traceId: generateTraceId(),
+    requestId: generateUUID()
+  };
+
+  // Log enhanced debugging information
+  console.log(`🔍 Enhanced webhook request:`);
+  console.log(`📋 Detect Intent Response ID: ${enhanced.detectIntentResponseId}`);
+  console.log(`🔗 Trace ID: ${enhanced.traceId}`);
+  console.log(`🆔 Request ID: ${enhanced.requestId}`);
+  console.log(`👤 Session ID: ${enhanced.sessionInfo.session}`);
+  console.log(`🏷️ Fulfillment Tag: ${enhanced.fulfillmentInfo.tag}`);
+  
+  return enhanced;
+}
+
+// Utility functions for enhanced debugging
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
   });
+}
+
+function generateTraceId(): string {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
+// Enhanced session parameter validation and setting
+export function validateAndSetSessionParameters(
+  parameters: Record<string, any>
+): { valid: boolean; errors: string[]; sanitized: Record<string, any> } {
+  const errors: string[] = [];
+  const sanitized: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(parameters)) {
+    // Validate parameter key format
+    if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(key)) {
+      errors.push(`Invalid parameter key format: ${key}`);
+      continue;
+    }
+
+    // Validate parameter value
+    if (value === null || value === undefined) {
+      errors.push(`Parameter '${key}' has null or undefined value`);
+      continue;
+    }
+
+    // Sanitize and add to result
+    sanitized[key] = value;
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    sanitized
+  };
 }

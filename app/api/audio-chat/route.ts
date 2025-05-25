@@ -1,6 +1,6 @@
 // app/api/audio-chat/route.ts - API route for handling audio input to Dialogflow
 import { NextRequest, NextResponse } from 'next/server';
-import { sendAudioToDialogflow, DialogflowAudioRequest } from '../../../lib/dialogflow';
+import { detectIntentFromAudio, DialogflowAudioRequest } from '../../../lib/dialogflow';
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,10 +21,8 @@ export async function POST(request: NextRequest) {
     console.log('📨 Processing audio request for session:', sessionId);
     console.log('🎵 Audio data length:', inputAudio.length);
     console.log('📊 Sample rate:', sampleRate || 'default (16000)');
-    console.log('🌍 Language:', languageCode || 'default (el)');
-
-    // Send audio to Dialogflow
-    const result = await sendAudioToDialogflow({
+    console.log('🌍 Language:', languageCode || 'default (el)');    // Send audio to Dialogflow
+    const result = await detectIntentFromAudio({
       sessionId,
       inputAudio,
       sampleRate,

@@ -3,17 +3,64 @@ import { sendMessageToDialogflow, type DialogflowResponse } from '../../../lib/d
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, sessionId } = await request.json();
+    const { message, sessionId, parameters } = await request.json();
 
     if (!message) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
 
     console.log(`Received message: "${message}"`);
-    console.log(`Session ID: ${sessionId || 'new session'}`);    // Send message to Dialogflow
-    const dialogflowResponse: DialogflowResponse = await sendMessageToDialogflow(message, sessionId);
-
+    console.log(`Session ID: ${sessionId || 'new session'}`);
+    if (parameters) {
+      console.log(`📋 Incoming parameters:`, JSON.stringify(parameters, null, 2));
+    }
+    
+    // Send message to Dialogflow with any provided parameters
+    const dialogflowResponse: DialogflowResponse = await sendMessageToDialogflow(message, sessionId, parameters);
     console.log('Dialogflow response received successfully');
+      // Check if the message looks like a registration number and manually trigger our handler
+    const registrationNumberPattern = /^[A-Z]{3}\d{4}$/i; // Pattern like ΒΤΜ3402
+    if (registrationNumberPattern.test(message.trim())) {
+      console.log('🚗 Detected registration number pattern, manually triggering handler');
+      
+      // Import the flow orchestrator
+      const { FlowOrchestrator } = await import('../../../lib/flow-handlers-simple');
+      
+      // Merge existing parameters with registration number
+      const mergedParameters = {
+        ...dialogflowResponse.parameters,
+        registration_number: message.trim()
+      };
+      
+      // Create a mock webhook request for registration collection
+      const mockRequest = {
+        fulfillmentInfo: { tag: 'collect.registration' },
+        sessionInfo: {
+          session: dialogflowResponse.sessionId,
+          parameters: mergedParameters
+        }
+      };
+      
+      try {
+        const manualResponse = await FlowOrchestrator.handleWebhookFlow(mockRequest);
+        if (manualResponse.fulfillmentResponse?.messages?.[0]?.text?.text?.[0]) {
+          // Override the Dialogflow response with our manual handler response
+          dialogflowResponse.response = manualResponse.fulfillmentResponse.messages[0].text.text[0];
+          
+          // Update session parameters if provided
+          if (manualResponse.sessionInfo?.parameters) {
+            dialogflowResponse.parameters = {
+              ...dialogflowResponse.parameters,
+              ...manualResponse.sessionInfo.parameters
+            };
+            console.log('🔄 Updated session parameters:', JSON.stringify(dialogflowResponse.parameters, null, 2));
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error in manual registration handler:', error);
+      }
+    }
+    
     console.log('📥 Dialogflow Response Details:');
     console.log('  💬 Response Message:', dialogflowResponse.response);
     console.log('  🎯 Intent:', dialogflowResponse.intent || 'No intent detected');
@@ -22,13 +69,12 @@ export async function POST(request: NextRequest) {
     console.log('  🔗 Session ID:', dialogflowResponse.sessionId);
     if (dialogflowResponse.parameters) {
       console.log('  📋 Parameters:', JSON.stringify(dialogflowResponse.parameters, null, 2));
-    }
-
-    return NextResponse.json({
+    }    return NextResponse.json({
       response: dialogflowResponse.response,
       sessionId: dialogflowResponse.sessionId,
       intent: dialogflowResponse.intent,
       confidence: dialogflowResponse.confidence,
+      parameters: dialogflowResponse.parameters, // Include parameters in response
     });
 
   } catch (error: unknown) {

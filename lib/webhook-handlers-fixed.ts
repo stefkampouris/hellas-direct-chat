@@ -1,7 +1,6 @@
 // lib/webhook-handlers.ts - Enhanced webhook handlers for Hellas Direct insurance cases
 import { WebhookRequest, WebhookResponse, EnhancedWebhookRequest, enhanceWebhookRequest, validateAndSetSessionParameters } from './dialogflow';
 import { FlowOrchestrator } from './flow-handlers-simple';
-import { updateIncidentFromMessage, getOrCreateIncidentForSession, IncidentData } from './incident-service';
 
 // Insurance case handler types
 export type CaseType = 'AC' | 'RA' | 'OTHER';
@@ -41,49 +40,10 @@ export async function handleWebhookRequest(request: WebhookRequest): Promise<Web
     console.log(`🎯 Webhook called with tag: ${tag}`);
     console.log(`📥 Enhanced Request:`, JSON.stringify(enhancedRequest, null, 2));
     
-    // Extract session ID for incident tracking
-    const sessionId = extractSessionId(enhancedRequest.sessionInfo.session);
-    
     // Log session information for debugging
     logSessionInfo(enhancedRequest);
     
-    // Handle incident creation and updates
-    if (enhancedRequest.text) {
-      console.log(`📝 Processing user message for incident tracking: "${enhancedRequest.text}"`);
-      
-      // Update incident with information from user message
-      const incident = await updateIncidentFromMessage(
-        sessionId, 
-        enhancedRequest.text,
-        enhancedRequest.sessionInfo.parameters?.user_id as string
-      );
-        if (incident) {
-        console.log(`✅ Incident updated: ${incident.id}`);
-        
-        // Add incident ID and extracted data to session parameters for future reference
-        enhancedRequest.sessionInfo.parameters = {
-          ...enhancedRequest.sessionInfo.parameters,
-          incident_id: incident.id,
-          case_type: incident.case_type || null,
-          registration_number: incident.registration_number || null
-        };
-      }
-    } else {
-      // Even without text, ensure we have an incident for this session
-      console.log(`📝 Ensuring incident exists for session: ${sessionId}`);
-      const incident = await getOrCreateIncidentForSession(
-        sessionId,
-        enhancedRequest.sessionInfo.parameters?.user_id as string
-      );
-      
-      if (incident) {
-        enhancedRequest.sessionInfo.parameters = {
-          ...enhancedRequest.sessionInfo.parameters,
-          incident_id: incident.id
-        };
-      }
-    }
-      // Validate session parameters if present
+    // Validate session parameters if present
     if (enhancedRequest.sessionInfo.parameters) {
       const validation = validateAndSetSessionParameters(enhancedRequest.sessionInfo.parameters);
       if (!validation.valid) {
@@ -175,15 +135,13 @@ function enhanceWebhookResponse(
     'webhook-timestamp': new Date().toISOString()
   };
   
-  // Merge all parameters: original response + request parameters + debugging
   return {
     ...response,
     sessionInfo: {
       ...response.sessionInfo,
       parameters: {
-        ...request.sessionInfo.parameters, // Include incident data and other session parameters
-        ...response.sessionInfo?.parameters, // Preserve any parameters from the flow handler
-        ...debuggingParams // Add debugging information
+        ...response.sessionInfo?.parameters,
+        ...debuggingParams
       }
     }
   };
