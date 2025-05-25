@@ -83,9 +83,47 @@ export class FlowOrchestrator {
       };
     }
   }
-    private static handleGreeting(context: FlowContext): WebhookResponse {
+  private static async handleGreeting(context: FlowContext): Promise<WebhookResponse> {
     console.log(`[FlowHandler] handleGreeting called`);
     
+    // Create a new incident when a conversation starts
+    // Initially, we only have the session ID
+    const newIncident: Partial<Omit<Incident, 'id' | 'created_at'>> & { user_id: string } = {
+      // Use a placeholder user_id until we can update it with the actual user
+      user_id: '00000000-0000-0000-0000-000000000000', // Placeholder that will be updated later
+      registration_number: null,
+      location: null,
+      description: null,
+      case_type: null
+    };
+    
+    try {
+      const incident = await DatabaseService.createIncident(newIncident);
+      
+      if (incident) {
+        console.log(`✅ Created new incident with ID: ${incident.id}`);
+        
+        return {
+          fulfillmentResponse: {
+            messages: [{
+              text: {
+                text: ['Καλησπέρα! Είμαι η εικονική βοηθός της Hellas Direct. Πώς μπορώ να σας βοηθήσω σήμερα;']
+              }
+            }]
+          },
+          sessionInfo: {
+            parameters: {
+              ...context.parameters,
+              case_id: incident.id // Store the incident ID in the session
+            }
+          }
+        };
+      }
+    } catch (error) {
+      console.error('Error creating incident:', error);
+    }
+    
+    // If there was an error, return the default response without case_id
     return {
       fulfillmentResponse: {
         messages: [{
@@ -152,7 +190,29 @@ export class FlowOrchestrator {
         policy_holder_name: null, // Will be collected
         policy_id: user.id,
         is_new_user: true
-      });
+      });      // Update existing incident with registration_number and user_id
+      if (context.parameters.case_id) {
+        try {
+          const incidentId = context.parameters.case_id;
+          
+          // First, update the registration_number
+          const updatedIncident = await DatabaseService.updateIncident(incidentId, {
+            registration_number: user.registration_number
+          });
+          
+          // Then, update the user_id with our special method
+          const userUpdatedIncident = await DatabaseService.updateIncidentUserId(incidentId, user.id);
+          
+          if (updatedIncident && userUpdatedIncident) {
+            console.log(`✅ Updated incident ${incidentId} with user_id: ${user.id} and registration_number: ${user.registration_number}`);
+          } else {
+            console.warn(`⚠️ Partial update for incident ${incidentId}. Check if both user_id and registration_number were updated.`);
+          }
+          
+        } catch (error) {
+          console.error('Error updating incident with user info:', error);
+        }
+      }
       
       return {
         fulfillmentResponse: {

@@ -343,9 +343,7 @@ export default function Home() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-          )}
-
-          <form onSubmit={handleUserMessage} className="flex items-end gap-3">
+          )}          <form onSubmit={handleUserMessage} className="flex items-end gap-3">
             <div className="flex-1 relative">
               <input
                 ref={inputRef} // Added ref to input element
@@ -365,6 +363,15 @@ export default function Home() {
               )}
             </div>
             
+            {/* Voice Recorder - Repositioned before image attachment */}
+            <VoiceRecorder 
+              onAudioResult={handleVoiceResult}
+              sessionId={sessionId}
+              disabled={isLoading || isAnalyzingImage}
+              onRecordingStart={() => inputRef.current?.blur()} // Blur input when recording starts
+              onRecordingEnd={() => inputRef.current?.focus()} // Focus input when recording ends or text is set
+            />
+            
             {/* Image attachment */}
             <ImageAttachment 
               onImageSelect={handleImageAttachment}
@@ -382,17 +389,6 @@ export default function Home() {
               </svg>
             </button>
           </form>
-          
-          {/* Enhanced Voice Recorder */}
-          <div className="mt-4 pt-4 border-t border-gray-100">
-            <VoiceRecorder 
-              onAudioResult={handleVoiceResult}
-              sessionId={sessionId}
-              disabled={isLoading || isAnalyzingImage}
-              onRecordingStart={() => inputRef.current?.blur()} // Blur input when recording starts
-              onRecordingEnd={() => inputRef.current?.focus()} // Focus input when recording ends or text is set
-            />
-          </div>
         </div>
       </div>
     </div>
