@@ -10,6 +10,11 @@ export interface Message {
     filename?: string;
     size?: number;
   };
+  voice?: {
+    enabled: boolean;
+    isPlaying?: boolean;
+    canSpeak?: boolean;
+  };
 }
 
 export interface DialogflowResponse {
