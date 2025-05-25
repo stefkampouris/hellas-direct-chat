@@ -1,5 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendMessageToDialogflow, type DialogflowResponse } from '../../../lib/dialogflow';
+import { DatabaseService } from '../../../lib/supabase';
+
+// Helper function to ensure an incident is created for each new conversation
+async function ensureIncidentCreated(sessionId: string, message: string): Promise<string | null> {
+  try {
+    // Create a placeholder user ID - this is required by the database schema
+    const placeholderUserId = '00000000-0000-0000-0000-000000000000';
+    
+    // Create a minimal incident with just the message
+    const incidentData = {
+      user_id: placeholderUserId,
+      description: `Initial message: ${message}`
+    };
+    
+    const incident = await DatabaseService.createIncident(incidentData);
+    
+    if (incident) {
+      console.log(`✅ Created new incident with ID: ${incident.id} for session: ${sessionId}`);
+      return incident.id;
+    } else {
+      console.error('❌ Failed to create incident');
+      return null;
+    }
+  } catch (error) {
+    console.error('❌ Error creating incident:', error);
+    return null;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,8 +43,19 @@ export async function POST(request: NextRequest) {
       console.log(`📋 Incoming parameters:`, JSON.stringify(parameters, null, 2));
     }
     
-    // Send message to Dialogflow with any provided parameters
-    const dialogflowResponse: DialogflowResponse = await sendMessageToDialogflow(message, sessionId, parameters);
+    // Create a new incident for this message if we don't already have one
+    let incidentId = parameters?.case_id;
+    if (!incidentId) {
+      incidentId = await ensureIncidentCreated(sessionId || 'new-session', message);
+    }
+      // Prepare parameters to send to Dialogflow, including our incident ID
+    const updatedParameters = {
+      ...parameters,
+      case_id: incidentId // Add the incident ID to the parameters
+    };
+    
+    // Send message to Dialogflow with updated parameters
+    const dialogflowResponse: DialogflowResponse = await sendMessageToDialogflow(message, sessionId, updatedParameters);
     console.log('Dialogflow response received successfully');
       // Check if the message looks like a registration number and manually trigger our handler
     const registrationNumberPattern = /^[A-Z]{3}\d{4}$/i; // Pattern like ΒΤΜ3402
@@ -65,16 +104,24 @@ export async function POST(request: NextRequest) {
     console.log('  💬 Response Message:', dialogflowResponse.response);
     console.log('  🎯 Intent:', dialogflowResponse.intent || 'No intent detected');
     console.log('  📊 Confidence:', dialogflowResponse.confidence || 'No confidence score');
-    console.log('  📄 Current Page:', dialogflowResponse.currentPage || 'No page info');
-    console.log('  🔗 Session ID:', dialogflowResponse.sessionId);
+    console.log('  📄 Current Page:', dialogflowResponse.currentPage || 'No page info');    console.log('  🔗 Session ID:', dialogflowResponse.sessionId);
     if (dialogflowResponse.parameters) {
       console.log('  📋 Parameters:', JSON.stringify(dialogflowResponse.parameters, null, 2));
-    }    return NextResponse.json({
+    }
+    
+    // Ensure the incident ID is included in the parameters
+    const finalParameters = {
+      ...dialogflowResponse.parameters,
+      case_id: incidentId || dialogflowResponse.parameters?.case_id
+    };
+    
+    return NextResponse.json({
       response: dialogflowResponse.response,
       sessionId: dialogflowResponse.sessionId,
       intent: dialogflowResponse.intent,
       confidence: dialogflowResponse.confidence,
-      parameters: dialogflowResponse.parameters, // Include parameters in response
+      parameters: finalParameters, // Include parameters with incident ID in response
+      incidentId: incidentId || dialogflowResponse.parameters?.case_id // Explicitly include incident ID in response
     });
 
   } catch (error: unknown) {

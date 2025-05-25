@@ -24,8 +24,11 @@ function createMockSupabaseClient() {
     incidents: [],
     users: []
   };
+  
+  // Mock channels for real-time subscriptions
+  const mockChannels: any[] = [];
     const createChainableQuery = (table: string, operation: string, data?: any) => {
-    return {
+  return {
       select: (columns = '*') => {
         // For INSERT operations, preserve the INSERT operation but add select columns
         if (operation === 'insert') {
@@ -143,11 +146,40 @@ function createMockSupabaseClient() {
       }
     };
   };
-  
-  return {
+    return {
     from: (table: string) => createChainableQuery(table, 'from'),
     // Add method to inspect mock database for debugging
-    _mockDB: mockDatabase
+    _mockDB: mockDatabase,
+    
+    // Mock real-time subscription methods
+    channel: (channelName: string) => {
+      console.log(`📡 Mock Supabase: Creating channel ${channelName}`);
+      const mockChannel = {
+        on: (eventType: string, config: any, callback: Function) => {
+          console.log(`📡 Mock Supabase: Setting up listener on channel ${channelName} for ${eventType}`);
+          return mockChannel;
+        },
+        subscribe: (callback?: (status: string, err?: Error) => void) => {
+          console.log(`📡 Mock Supabase: Subscribing to channel ${channelName}`);
+          // If there's a callback, call it with success status
+          if (callback) {
+            setTimeout(() => callback('SUBSCRIBED'), 0);
+          }
+          return mockChannel;
+        }
+      };
+      mockChannels.push(mockChannel);
+      return mockChannel;
+    },
+    
+    removeChannel: (channel: any) => {
+      console.log(`📡 Mock Supabase: Removing channel`);
+      const index = mockChannels.indexOf(channel);
+      if (index !== -1) {
+        mockChannels.splice(index, 1);
+      }
+      return { error: null, data: { status: 'ok' } };
+    }
   } as any;
 }
 
@@ -262,8 +294,7 @@ export class DatabaseService {
     
     return data;
   }
-  
-  static async updateIncident(incidentId: string, updates: Partial<Omit<Incident, 'id' | 'created_at' | 'user_id'>>): Promise<Incident | null> {
+    static async updateIncident(incidentId: string, updates: Partial<Omit<Incident, 'id' | 'created_at' | 'user_id'>>): Promise<Incident | null> {
     // user_id and created_at should generally not be updated this way.
     // id is used for the .eq filter.
     console.log(`🔄 Querying Supabase: updateIncident with incidentId: ${incidentId} and updates:`, updates);
@@ -276,6 +307,24 @@ export class DatabaseService {
     
     if (error) {
       console.error('Error updating incident:', error);
+      return null;
+    }
+    
+    return data;
+  }
+  
+  // Special method to update an incident's user_id - this is a critical relationship update
+  static async updateIncidentUserId(incidentId: string, userId: string): Promise<Incident | null> {
+    console.log(`🔄 Querying Supabase: updateIncidentUserId with incidentId: ${incidentId} and userId: ${userId}`);
+    const { data, error } = await supabase
+      .from('incidents')
+      .update({ user_id: userId })
+      .eq('id', incidentId)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error updating incident user_id:', error);
       return null;
     }
     
