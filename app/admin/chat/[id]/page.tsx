@@ -54,19 +54,27 @@ interface Message {
   timestamp: string;
 }
 
-export default function ChatPage({
-  params,
-}: {
-  params: { id: string }
-}) {
+export default function ChatPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const [incident, setIncident] = useState<Incident | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState('');
+  const [incidentId, setIncidentId] = useState<string | null>(null);
 
   useEffect(() => {
+    const initializeParams = async () => {
+      const resolvedParams = await params;
+      setIncidentId(resolvedParams.id);
+    };
+    
+    initializeParams();
+  }, [params]);
+
+  useEffect(() => {
+    if (!incidentId) return;
+
     const fetchIncidentData = async () => {
       try {
         setLoading(true);
@@ -74,7 +82,7 @@ export default function ChatPage({
         const { data: incidentData, error: incidentError } = await supabase
           .from('incidents')
           .select('*, users (*)')
-          .eq('id', params.id)
+          .eq('id', incidentId)
           .single();
 
         if (incidentError) {
@@ -88,21 +96,21 @@ export default function ChatPage({
         const mockMessages = [
           {
             id: '1',
-            incident_id: params.id,
+            incident_id: incidentId,
             sender: 'system',
             content: 'Chat session started',
             timestamp: new Date().toISOString()
           },
           {
             id: '2',
-            incident_id: params.id,
+            incident_id: incidentId,
             sender: 'user',
             content: 'My car broke down on the highway',
             timestamp: new Date(Date.now() - 60000).toISOString()
           },
           {
             id: '3',
-            incident_id: params.id,
+            incident_id: incidentId,
             sender: 'agent',
             content: 'I understand the situation. Can you share your current location?',
             timestamp: new Date(Date.now() - 30000).toISOString()
@@ -118,21 +126,21 @@ export default function ChatPage({
       }
     };
 
-    if (params.id) {
-      fetchIncidentData();
-    }    // Set up realtime subscription for incident updates
+    fetchIncidentData();
+
+    // Set up realtime subscription for incident updates
     const subscription = supabase
-      .channel(`incident-${params.id}`)
+      .channel(`incident-${incidentId}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'incidents', filter: `id=eq.${params.id}` },
+        { event: 'UPDATE', schema: 'public', table: 'incidents', filter: `id=eq.${incidentId}` },
         (payload: RealtimePostgresChangesPayload<Incident>) => {
           console.log('Incident updated:', payload);
           // Fetch the complete incident with user data
           supabase
             .from('incidents')
             .select('*, users (*)')
-            .eq('id', params.id)
+            .eq('id', incidentId)
             .single()
             .then(({ data }: { data: Incident | null }) => {
               if (data) {
@@ -146,16 +154,16 @@ export default function ChatPage({
     return () => {
       supabase.removeChannel(subscription);
     };
-  }, [params.id]);
+  }, [incidentId]);
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !incidentId) return;
 
     // In a real app, you would send this to your backend/database
     const newMsg: Message = {
       id: `temp-${Date.now()}`,
-      incident_id: params.id,
+      incident_id: incidentId,
       sender: 'agent',
       content: newMessage,
       timestamp: new Date().toISOString()
